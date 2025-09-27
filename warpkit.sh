@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # WarpKit - Linux服务运维工具
-# Version: 1.0.0
+# WARPKIT_COMMIT: 72270cf
 # Author: Claude Code Assistant
 
 set -euo pipefail
@@ -30,11 +30,27 @@ declare -g KERNEL=""
 declare -g ARCH=""
 
 # 更新相关变量
-declare -r WARPKIT_VERSION="1.0.0"
 declare -r GITHUB_REPO="marvinli001/warpkit"
 declare -r CONFIG_DIR="$HOME/.config/warpkit"
 declare -r CACHE_DIR="$HOME/.cache/warpkit"
 declare -r UPDATE_CHECK_FILE="$CACHE_DIR/last_update_check"
+
+# 动态获取当前版本 (Git commit hash)
+get_current_version() {
+    # 尝试从脚本中提取嵌入的commit hash
+    local embedded_hash=$(grep -o "# WARPKIT_COMMIT: [a-f0-9]\{7,\}" "$0" 2>/dev/null | cut -d' ' -f3)
+    if [[ -n "$embedded_hash" ]]; then
+        echo "$embedded_hash"
+        return
+    fi
+
+    # 如果在git仓库中，获取当前commit
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
 
 # 打印Logo
 print_logo() {
@@ -47,7 +63,7 @@ print_logo() {
     echo "╚███╔███╔╝██║  ██║██║  ██║██║     ██║  ██╗██║   ██║   "
     echo " ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝   ╚═╝   "
     echo -e "${NC}"
-    echo -e "${YELLOW}Linux服务运维工具 v1.0.0${NC}"
+    echo -e "${YELLOW}Linux服务运维工具 $(get_current_version)${NC}"
     echo ""
 }
 
@@ -80,56 +96,43 @@ record_update_check() {
     echo "$today" > "$UPDATE_CHECK_FILE"
 }
 
-# 获取GitHub最新版本
-get_latest_version() {
-    local latest_version=""
+# 获取GitHub最新commit hash
+get_latest_commit() {
+    local latest_commit=""
 
-    # 尝试使用curl获取最新版本
+    # 尝试使用curl获取最新commit
     if command -v curl >/dev/null 2>&1; then
-        latest_version=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//' 2>/dev/null)
+        latest_commit=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/commits/master" | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7 2>/dev/null)
     # 如果没有curl，尝试wget
     elif command -v wget >/dev/null 2>&1; then
-        latest_version=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//' 2>/dev/null)
+        latest_commit=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/commits/master" | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7 2>/dev/null)
     fi
 
-    echo "$latest_version"
+    echo "$latest_commit"
 }
 
-# 比较版本号
-version_compare() {
+# 比较commit hash
+commit_compare() {
     local current="$1"
     local latest="$2"
 
-    # 如果版本号相同，返回0（不需要更新）
+    # 如果commit hash相同，返回1（不需要更新）
     if [[ "$current" == "$latest" ]]; then
         return 1
     fi
 
-    # 简单的版本比较（适用于语义化版本）
-    local IFS='.'
-    local current_parts=($current)
-    local latest_parts=($latest)
-
-    # 比较主版本号
-    if [[ ${current_parts[0]:-0} -lt ${latest_parts[0]:-0} ]]; then
+    # 如果当前版本是unknown，则需要更新
+    if [[ "$current" == "unknown" ]]; then
         return 0
-    elif [[ ${current_parts[0]:-0} -gt ${latest_parts[0]:-0} ]]; then
+    fi
+
+    # 如果获取不到最新commit，返回1（不更新）
+    if [[ -z "$latest" ]]; then
         return 1
     fi
 
-    # 比较次版本号
-    if [[ ${current_parts[1]:-0} -lt ${latest_parts[1]:-0} ]]; then
-        return 0
-    elif [[ ${current_parts[1]:-0} -gt ${latest_parts[1]:-0} ]]; then
-        return 1
-    fi
-
-    # 比较修订版本号
-    if [[ ${current_parts[2]:-0} -lt ${latest_parts[2]:-0} ]]; then
-        return 0
-    fi
-
-    return 1
+    # commit hash不同，需要更新
+    return 0
 }
 
 # 检查更新
@@ -141,25 +144,28 @@ check_for_updates() {
         return
     fi
 
-    echo -e "${YELLOW}🔍 检查更新中...${NC}"
+    echo -e "${YELLOW}🔍 检查更新中...${NC}" >&2
 
-    local latest_version=$(get_latest_version)
+    local current_commit=$(get_current_version)
+    local latest_commit=$(get_latest_commit)
 
-    if [[ -z "$latest_version" ]]; then
-        echo -e "${RED}❌ 无法获取最新版本信息，请检查网络连接${NC}"
+    if [[ -z "$latest_commit" ]]; then
+        if [[ "$force_check" == "true" ]]; then
+            echo -e "${RED}❌ 无法获取最新版本信息，请检查网络连接${NC}" >&2
+        fi
         return
     fi
 
-    if version_compare "$WARPKIT_VERSION" "$latest_version"; then
-        echo -e "${GREEN}🎉 发现新版本 v$latest_version（当前版本 v$WARPKIT_VERSION）${NC}"
-        echo -e "${CYAN}是否现在更新？ [y/N] ${NC}"
+    if commit_compare "$current_commit" "$latest_commit"; then
+        echo -e "${GREEN}🎉 发现新版本 $latest_commit（当前版本 $current_commit）${NC}" >&2
+        echo -e "${CYAN}是否现在更新？ [y/N] ${NC}" >&2
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
-            perform_update "$latest_version"
+            perform_update "$latest_commit"
         fi
     else
         if [[ "$force_check" == "true" ]]; then
-            echo -e "${GREEN}✅ 已是最新版本 v$WARPKIT_VERSION${NC}"
+            echo -e "${GREEN}✅ 已是最新版本 $current_commit${NC}" >&2
         fi
     fi
 
@@ -173,7 +179,7 @@ perform_update() {
     local script_path="$(readlink -f "$0")"
     local backup_path="${script_path}.backup.$(date +%Y%m%d_%H%M%S)"
 
-    echo -e "${YELLOW}📦 开始更新到 v$new_version...${NC}"
+    echo -e "${YELLOW}📦 开始更新到 $new_version...${NC}"
 
     # 备份当前脚本
     echo -e "${BLUE}📋 备份当前版本...${NC}"
@@ -205,11 +211,15 @@ perform_update() {
         return 1
     fi
 
+    # 更新下载文件中的commit hash
+    echo -e "${BLUE}🔄 更新版本信息...${NC}"
+    sed -i "s/# WARPKIT_COMMIT: [a-f0-9]\{7,\}/# WARPKIT_COMMIT: $new_version/" "$temp_file"
+
     # 替换当前脚本
     echo -e "${BLUE}🔄 安装新版本...${NC}"
     if cp "$temp_file" "$script_path" && chmod +x "$script_path"; then
         rm -f "$temp_file"
-        echo -e "${GREEN}✅ 更新成功！已更新到 v$new_version${NC}"
+        echo -e "${GREEN}✅ 更新成功！已更新到 $new_version${NC}"
         echo -e "${YELLOW}备份文件保存在: $backup_path${NC}"
         echo -e "${CYAN}重新启动 WarpKit 以使用新版本...${NC}"
         sleep 2
@@ -705,7 +715,7 @@ show_system_update() {
 
 # 显示帮助信息
 show_help() {
-    echo -e "${CYAN}${BOLD}WarpKit - Linux服务运维工具 v$WARPKIT_VERSION${NC}"
+    echo -e "${CYAN}${BOLD}WarpKit - Linux服务运维工具 $(get_current_version)${NC}"
     echo ""
     echo -e "${YELLOW}用法:${NC}"
     echo "  warpkit [选项]"
@@ -727,7 +737,7 @@ show_help() {
 
 # 显示版本信息
 show_version() {
-    echo "WarpKit v$WARPKIT_VERSION"
+    echo "WarpKit $(get_current_version)"
 }
 
 # 处理命令行参数
@@ -785,7 +795,7 @@ main() {
     check_for_updates
 
     # 启用终端原始模式以捕获方向键
-    stty -echo -icanon time 0 min 0
+    stty -echo -icanon
 
     # 设置退出时恢复终端
     trap 'stty echo icanon; exit' EXIT INT TERM
