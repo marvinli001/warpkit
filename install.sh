@@ -42,19 +42,19 @@ print_logo() {
 
 # 状态信息
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} $1" >&2
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[WARNING]${NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 # 进度条
@@ -159,7 +159,7 @@ download_warpkit() {
 
     # 尝试使用curl下载
     if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$download_url" -o "$temp_file" >/dev/null 2>&1; then
+        if curl -fsSL "$download_url" -o "$temp_file"; then
             log_success "使用curl下载完成"
         else
             log_error "curl下载失败，尝试使用wget"
@@ -188,7 +188,7 @@ download_with_wget() {
     local url=$1
     local output=$2
 
-    if wget -q "$url" -O "$output" >/dev/null 2>&1; then
+    if wget -q "$url" -O "$output"; then
         log_success "使用wget下载完成"
     else
         log_error "wget下载失败"
