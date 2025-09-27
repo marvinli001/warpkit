@@ -538,70 +538,125 @@ debug_log() {
     fi
 }
 
-# 读取单个按键 - 重新设计更可靠的版本
+# 清空输入缓冲区
+flush_input() {
+    local dummy
+    while IFS= read -r -n1 -t 0.001 dummy 2>/dev/null; do
+        debug_log "flush_input: 清除残留字节: $(printf '%q' "$dummy")"
+    done
+    true  # 确保函数返回 0
+}
+
+# 读取单个按键 - 两段式读取，确保幂等与零退出
 read_key() {
-    local key=""
-    local keyseq=""
+    local first_byte=""
+    local second_byte=""
+    local third_byte=""
+    local in_esc_sequence=false
 
-    debug_log "read_key: 开始读取按键"
+    debug_log "read_key: 开始两段式读取"
 
-    # 尝试读取最多3个字符（方向键是3字符序列）
-    if IFS= read -r -n3 -t 0.5 keyseq 2>/dev/null; then
-        debug_log "read_key: 读取到序列: $(printf '%q' "$keyseq") (长度: ${#keyseq})"
+    # 第一段：读取第一个字节
+    if IFS= read -r -n1 -t 1 first_byte 2>/dev/null; then
+        debug_log "read_key: 第一字节: $(printf '%q' "$first_byte")"
 
-        case "$keyseq" in
-            $'\e[A')
-                debug_log "read_key: 检测到上方向键"
-                echo "UP" ;;
-            $'\e[B')
-                debug_log "read_key: 检测到下方向键"
-                echo "DOWN" ;;
-            $'\e[C')
-                debug_log "read_key: 检测到右方向键"
-                echo "RIGHT" ;;
-            $'\e[D')
-                debug_log "read_key: 检测到左方向键"
-                echo "LEFT" ;;
-            'q'|'Q')
-                debug_log "read_key: 检测到退出键"
-                echo "QUIT" ;;
-            '')
-                debug_log "read_key: 检测到回车键"
-                echo "ENTER" ;;
-            $'\n')
-                debug_log "read_key: 检测到换行符"
-                echo "ENTER" ;;
-            $'\r')
-                debug_log "read_key: 检测到回车符"
-                echo "ENTER" ;;
-            *)
-                # 如果是单字符
-                if [[ ${#keyseq} -eq 1 ]]; then
-                    key="$keyseq"
-                    case "$key" in
-                        'q'|'Q')
-                            debug_log "read_key: 检测到单字符退出键"
-                            echo "QUIT" ;;
-                        '')
-                            debug_log "read_key: 检测到单字符回车"
-                            echo "ENTER" ;;
-                        $'\e')
-                            debug_log "read_key: 检测到单独ESC，忽略处理"
-                            echo "OTHER" ;;
-                        *)
-                            debug_log "read_key: 检测到其他单字符: $(printf '%q' "$key")"
-                            echo "OTHER" ;;
-                    esac
+        # 检查是否是ESC，进入方向键状态机
+        if [[ "$first_byte" == $'\e' ]]; then
+            in_esc_sequence=true
+            debug_log "read_key: 进入ESC序列状态"
+
+            # 第二段：用极短超时读取最多2个字节
+            if IFS= read -r -n1 -t 0.01 second_byte 2>/dev/null; then
+                debug_log "read_key: 第二字节: $(printf '%q' "$second_byte")"
+
+                if [[ "$second_byte" == "[" ]]; then
+                    # 继续读取第三字节
+                    if IFS= read -r -n1 -t 0.01 third_byte 2>/dev/null; then
+                        debug_log "read_key: 第三字节: $(printf '%q' "$third_byte")"
+
+                        # 组装完整序列并检查
+                        case "$third_byte" in
+                            'A')
+                                debug_log "read_key: 完整上方向键序列"
+                                echo "UP"
+                                return 0
+                                ;;
+                            'B')
+                                debug_log "read_key: 完整下方向键序列"
+                                echo "DOWN"
+                                return 0
+                                ;;
+                            'C')
+                                debug_log "read_key: 完整右方向键序列"
+                                echo "RIGHT"
+                                return 0
+                                ;;
+                            'D')
+                                debug_log "read_key: 完整左方向键序列"
+                                echo "LEFT"
+                                return 0
+                                ;;
+                            *)
+                                debug_log "read_key: ESC[后跟无效字符，丢弃"
+                                echo "OTHER"
+                                return 0
+                                ;;
+                        esac
+                    else
+                        debug_log "read_key: ESC[后未读到第三字节，不完整序列"
+                        echo "OTHER"
+                        return 0
+                    fi
                 else
-                    debug_log "read_key: 检测到其他序列: $(printf '%q' "$keyseq")"
+                    debug_log "read_key: ESC后非[字符，不完整序列"
                     echo "OTHER"
+                    return 0
                 fi
-                ;;
-        esac
+            else
+                debug_log "read_key: 单独ESC，丢弃"
+                echo "OTHER"
+                return 0
+            fi
+        else
+            # 处理非ESC的第一字节
+            case "$first_byte" in
+                '')
+                    debug_log "read_key: 空字符回车"
+                    echo "ENTER"
+                    return 0
+                    ;;
+                $'\n')
+                    debug_log "read_key: 换行符回车"
+                    echo "ENTER"
+                    return 0
+                    ;;
+                $'\r')
+                    debug_log "read_key: 回车符"
+                    echo "ENTER"
+                    return 0
+                    ;;
+                'q'|'Q')
+                    # 只有在非ESC状态下q/Q才是退出
+                    debug_log "read_key: 退出键"
+                    echo "QUIT"
+                    return 0
+                    ;;
+                *)
+                    debug_log "read_key: 其他字符: $(printf '%q' "$first_byte")"
+                    echo "OTHER"
+                    return 0
+                    ;;
+            esac
+        fi
     else
-        debug_log "read_key: 读取超时或失败"
+        debug_log "read_key: 读取超时"
         echo "OTHER"
+        return 0
     fi
+
+    # 兜底确保返回0
+    echo "OTHER"
+    return 0
 }
 
 # 处理菜单导航
@@ -609,6 +664,8 @@ handle_navigation() {
     while true; do
         show_main_menu
 
+        flush_input
+        flush_input
         local key=$(read_key)
 
         case "$key" in
@@ -756,6 +813,7 @@ show_package_management() {
         echo ""
         echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回主菜单${NC}"
 
+        flush_input
         local key=$(read_key)
         case "$key" in
             "UP")
@@ -1099,6 +1157,7 @@ show_network_tools() {
         echo ""
         echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回主菜单${NC}"
 
+        flush_input
         local key=$(read_key)
         case "$key" in
             "UP")
@@ -1166,6 +1225,7 @@ show_bbr_config() {
         echo ""
         echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回${NC}"
 
+        flush_input
         local key=$(read_key)
         case "$key" in
             "UP")
@@ -1579,6 +1639,7 @@ show_dns_repair_menu() {
         echo ""
         echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回${NC}"
 
+        flush_input
         local key=$(read_key)
         case "$key" in
             "UP")
@@ -2012,6 +2073,7 @@ show_script_management() {
         echo ""
         echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回主菜单${NC}"
 
+        flush_input
         local key=$(read_key)
         case "$key" in
             "UP")
