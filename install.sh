@@ -26,6 +26,9 @@ declare -r INSTALL_DIR="/usr/local/bin"
 declare -r CONFIG_DIR="$HOME/.config/warpkit"
 declare -r SCRIPT_NAME="warpkit"
 
+# 全局变量
+declare -g TEMP_FILE=""
+
 # 打印Logo
 print_logo() {
     echo -e "${CYAN}${BOLD}"
@@ -154,33 +157,30 @@ create_directories() {
 download_warpkit() {
     log_info "下载WarpKit主脚本..."
 
-    local temp_file="/tmp/warpkit_download.sh"
+    TEMP_FILE="/tmp/warpkit_download.sh"
     local download_url="https://raw.githubusercontent.com/${GITHUB_REPO}/master/warpkit.sh"
 
     # 尝试使用curl下载
     if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$download_url" -o "$temp_file"; then
+        if curl -fsSL "$download_url" -o "$TEMP_FILE"; then
             log_success "使用curl下载完成"
         else
             log_error "curl下载失败，尝试使用wget"
-            download_with_wget "$download_url" "$temp_file"
+            download_with_wget "$download_url" "$TEMP_FILE"
         fi
     # 否则使用wget
     elif command -v wget >/dev/null 2>&1; then
-        download_with_wget "$download_url" "$temp_file"
+        download_with_wget "$download_url" "$TEMP_FILE"
     else
         log_error "无法找到curl或wget下载工具"
         exit 1
     fi
 
     # 验证下载文件
-    if [[ ! -f "$temp_file" ]] || [[ ! -s "$temp_file" ]]; then
+    if [[ ! -f "$TEMP_FILE" ]] || [[ ! -s "$TEMP_FILE" ]]; then
         log_error "下载文件验证失败"
         exit 1
     fi
-
-    # 只输出文件路径，不输出日志信息到stdout
-    printf "%s" "$temp_file"
 }
 
 # 使用wget下载
@@ -359,8 +359,6 @@ main_install() {
     echo -e "${BOLD}开始安装WarpKit...${NC}"
     echo ""
 
-    local temp_file=""
-
     for i in "${!steps[@]}"; do
         show_progress $((i+1)) ${#steps[@]} "安装进度"
         sleep 0.5
@@ -369,8 +367,8 @@ main_install() {
             0) check_requirements ;;
             1) detect_distro ;;
             2) create_directories ;;
-            3) temp_file=$(download_warpkit) ;;
-            4) install_script "$temp_file" ;;
+            3) download_warpkit ;;
+            4) install_script "$TEMP_FILE" ;;
             5) configure_path ;;
             6) create_config ;;
             7) verify_installation ;;
