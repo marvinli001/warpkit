@@ -55,3 +55,7 @@ personal.conf
 # 安装过程中的临时文件
 install.tmp
 download.tmp
+
+# 测试文件
+test_*.sh
+*_test.sh

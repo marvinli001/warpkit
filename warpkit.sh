@@ -506,22 +506,30 @@ show_main_menu() {
 
 # 读取单个按键
 read_key() {
-    local key key2 key3
+    local key
     read -rsn1 key
 
     case "$key" in
         $'\x1b')  # ESC序列
-            read -rsn1 key2
-            read -rsn1 key3
-            case "$key2$key3" in
-                '[A') echo "UP" ;;
-                '[B') echo "DOWN" ;;
-                '[C') echo "RIGHT" ;;
-                '[D') echo "LEFT" ;;
-                *) echo "OTHER" ;;
-            esac
+            # 使用超时读取避免阻塞
+            local key2 key3
+            read -rsn1 -t 0.1 key2 2>/dev/null
+            read -rsn1 -t 0.1 key3 2>/dev/null
+
+            if [[ "$key2" == "[" ]]; then
+                case "$key3" in
+                    'A') echo "UP" ;;
+                    'B') echo "DOWN" ;;
+                    'C') echo "RIGHT" ;;
+                    'D') echo "LEFT" ;;
+                    *) echo "OTHER" ;;
+                esac
+            else
+                echo "OTHER"
+            fi
             ;;
         '') echo "ENTER" ;;
+        $'\n') echo "ENTER" ;;  # 处理换行符
         'q'|'Q') echo "QUIT" ;;
         *) echo "OTHER" ;;
     esac
@@ -708,6 +716,12 @@ show_package_management() {
                 ;;
             "QUIT")
                 return
+                ;;
+            "OTHER")
+                # 忽略其他按键，继续循环
+                ;;
+            *)
+                # 对于未识别的按键，也忽略
                 ;;
         esac
     done
@@ -1036,6 +1050,12 @@ show_network_tools() {
             "QUIT")
                 return
                 ;;
+            "OTHER")
+                # 忽略其他按键，继续循环
+                ;;
+            *)
+                # 对于未识别的按键，也忽略
+                ;;
         esac
     done
 }
@@ -1094,6 +1114,12 @@ show_bbr_config() {
                 ;;
             "QUIT")
                 return
+                ;;
+            "OTHER")
+                # 忽略其他按键，继续循环
+                ;;
+            *)
+                # 对于未识别的按键，也忽略
                 ;;
         esac
     done
@@ -1496,6 +1522,12 @@ show_dns_repair_menu() {
                 ;;
             "QUIT")
                 return
+                ;;
+            "OTHER")
+                # 忽略其他按键，继续循环
+                ;;
+            *)
+                # 对于未识别的按键，也忽略
                 ;;
         esac
     done
@@ -1916,6 +1948,12 @@ show_script_management() {
                 ;;
             "QUIT")
                 return
+                ;;
+            "OTHER")
+                # 忽略其他按键，继续循环
+                ;;
+            *)
+                # 对于未识别的按键，也忽略
                 ;;
         esac
     done
