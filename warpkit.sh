@@ -27,6 +27,7 @@ declare -g DISTRO=""
 declare -g VERSION=""
 declare -g KERNEL=""
 declare -g ARCH=""
+declare -g DEBUG_MODE=false
 
 # 更新相关变量
 declare -r GITHUB_REPO="marvinli001/warpkit"
@@ -180,9 +181,9 @@ check_for_updates() {
         echo -e "${GREEN}🎉 发现新版本 $latest_commit（当前版本 $current_commit）${NC}" >&2
         echo -e "${CYAN}是否现在更新？ [y/N] ${NC}" >&2
         # 临时恢复终端模式进行输入
-        stty echo icanon 2>/dev/null
+        restore_terminal_state
         read -r response
-        stty -echo -icanon 2>/dev/null
+        set_raw_terminal
         if [[ "$response" =~ ^[Yy]$ ]]; then
             perform_update "$latest_commit"
         fi
@@ -245,7 +246,7 @@ perform_update() {
         echo -e "${CYAN}请重新运行 warpkit 以使用新版本${NC}"
         echo ""
         echo "按任意键退出..."
-        stty echo icanon  # 临时恢复终端模式
+        restore_terminal_state
         read -n1
         exit 0
     else
@@ -511,39 +512,93 @@ show_main_menu() {
     echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 退出${NC}"
 }
 
-# 读取单个按键
+# 保存和恢复终端状态
+save_terminal_state() {
+    stty -g > "/tmp/warpkit_terminal_state.$$" 2>/dev/null
+}
+
+restore_terminal_state() {
+    if [[ -f "/tmp/warpkit_terminal_state.$$" ]]; then
+        stty "$(cat "/tmp/warpkit_terminal_state.$$")" 2>/dev/null
+        rm -f "/tmp/warpkit_terminal_state.$$" 2>/dev/null
+    else
+        stty sane 2>/dev/null
+    fi
+}
+
+# 设置原始终端模式
+set_raw_terminal() {
+    stty -echo -icanon min 0 time 1 2>/dev/null
+}
+
+# 调试输出
+debug_log() {
+    if [[ "$DEBUG_MODE" == "true" ]]; then
+        echo "[DEBUG] $*" >&2
+    fi
+}
+
+# 读取单个按键 - 重新设计更可靠的版本
 read_key() {
-    local key
-    # 确保终端设置正确
-    stty -echo -icanon 2>/dev/null
+    local key=""
+    local keyseq=""
 
-    read -rsn1 key 2>/dev/null
+    debug_log "read_key: 开始读取按键"
 
-    case "$key" in
-        $'\x1b')  # ESC序列
-            # 使用超时读取避免阻塞
-            local key2 key3
-            read -rsn1 -t 0.1 key2 2>/dev/null
-            read -rsn1 -t 0.1 key3 2>/dev/null
+    # 尝试读取最多3个字符（方向键是3字符序列）
+    if IFS= read -r -n3 -t 0.5 keyseq 2>/dev/null; then
+        debug_log "read_key: 读取到序列: $(printf '%q' "$keyseq") (长度: ${#keyseq})"
 
-            if [[ "$key2" == "[" ]]; then
-                case "$key3" in
-                    'A') echo "UP" ;;
-                    'B') echo "DOWN" ;;
-                    'C') echo "RIGHT" ;;
-                    'D') echo "LEFT" ;;
-                    *) echo "OTHER" ;;
-                esac
-            else
-                echo "OTHER"
-            fi
-            ;;
-        '') echo "ENTER" ;;
-        $'\n') echo "ENTER" ;;  # 处理换行符
-        $'\r') echo "ENTER" ;;  # 处理回车符
-        'q'|'Q') echo "QUIT" ;;
-        *) echo "OTHER" ;;
-    esac
+        case "$keyseq" in
+            $'\e[A')
+                debug_log "read_key: 检测到上方向键"
+                echo "UP" ;;
+            $'\e[B')
+                debug_log "read_key: 检测到下方向键"
+                echo "DOWN" ;;
+            $'\e[C')
+                debug_log "read_key: 检测到右方向键"
+                echo "RIGHT" ;;
+            $'\e[D')
+                debug_log "read_key: 检测到左方向键"
+                echo "LEFT" ;;
+            'q'|'Q')
+                debug_log "read_key: 检测到退出键"
+                echo "QUIT" ;;
+            '')
+                debug_log "read_key: 检测到回车键"
+                echo "ENTER" ;;
+            $'\n')
+                debug_log "read_key: 检测到换行符"
+                echo "ENTER" ;;
+            $'\r')
+                debug_log "read_key: 检测到回车符"
+                echo "ENTER" ;;
+            *)
+                # 如果是单字符
+                if [[ ${#keyseq} -eq 1 ]]; then
+                    key="$keyseq"
+                    case "$key" in
+                        'q'|'Q')
+                            debug_log "read_key: 检测到单字符退出键"
+                            echo "QUIT" ;;
+                        '')
+                            debug_log "read_key: 检测到单字符回车"
+                            echo "ENTER" ;;
+                        *)
+                            debug_log "read_key: 检测到其他单字符: $(printf '%q' "$key")"
+                            echo "OTHER" ;;
+                    esac
+                else
+                    debug_log "read_key: 检测到其他序列: $(printf '%q' "$keyseq")"
+                    echo "OTHER"
+                fi
+                ;;
+        esac
+    else
+        debug_log "read_key: 读取超时或失败"
+        echo "OTHER"
+    fi
 }
 
 # 处理菜单导航
@@ -885,9 +940,9 @@ search_packages() {
 
     echo -e "${CYAN}请输入要搜索的软件包名称:${NC}"
     # 临时恢复终端模式进行输入
-    stty echo icanon 2>/dev/null
+    restore_terminal_state
     read -r search_term
-    stty -echo -icanon 2>/dev/null
+    set_raw_terminal
 
     if [[ -n "$search_term" ]]; then
         echo ""
@@ -1705,9 +1760,9 @@ restore_default_dns() {
         echo -e "${YELLOW}发现备份文件: $(basename "$latest_backup")${NC}"
         echo -e "${CYAN}是否恢复此备份？ [y/N]${NC}"
         # 临时恢复终端模式进行输入
-        stty echo icanon 2>/dev/null
+        restore_terminal_state
         read -r response
-        stty -echo -icanon 2>/dev/null
+        set_raw_terminal
 
         if [[ "$response" =~ ^[Yy]$ ]]; then
             cp "$latest_backup" /etc/resolv.conf 2>/dev/null && {
@@ -1909,6 +1964,10 @@ parse_arguments() {
             --lang)
                 LANGUAGE="$2"
                 shift 2
+                ;;
+            --debug)
+                DEBUG_MODE=true
+                shift
                 ;;
             *)
                 echo -e "${RED}未知选项: $1${NC}"
@@ -2181,16 +2240,17 @@ main() {
     # 检测系统信息
     detect_distro
 
-    # 每日首次启动时检查更新
-    check_for_updates
+    # 保存当前终端状态
+    save_terminal_state
 
     # 设置退出时恢复终端
-    trap 'stty echo icanon; exit' EXIT INT TERM
+    trap 'restore_terminal_state; exit' EXIT INT TERM
 
-    # 启用终端原始模式以捕获方向键
-    # 添加一个小延迟确保终端模式正确设置
-    stty -echo -icanon 2>/dev/null
-    sleep 0.1
+    # 每日首次启动时检查更新（在设置终端模式之前）
+    check_for_updates
+
+    # 设置原始终端模式
+    set_raw_terminal
 
     # 开始导航
     handle_navigation

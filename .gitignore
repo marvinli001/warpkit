@@ -59,3 +59,5 @@ download.tmp
 # 测试文件
 test_*.sh
 *_test.sh
+debug_*.sh
+*_debug.sh
