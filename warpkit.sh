@@ -34,18 +34,42 @@ declare -r CONFIG_DIR="$HOME/.config/warpkit"
 declare -r CACHE_DIR="$HOME/.cache/warpkit"
 declare -r UPDATE_CHECK_FILE="$CACHE_DIR/last_update_check"
 
-# 获取当前脚本的git commit hash
+# 获取当前脚本的版本
 get_current_version() {
     local script_dir=$(dirname "$(readlink -f "$0")")
+    local version_file="$CONFIG_DIR/current_version"
+
+    # 首先检查是否有存储的版本信息
+    if [[ -f "$version_file" ]]; then
+        cat "$version_file" 2>/dev/null || echo "unknown"
+        return
+    fi
 
     # 检查脚本所在目录是否是git仓库
     if cd "$script_dir" 2>/dev/null && git rev-parse --git-dir >/dev/null 2>&1; then
         # 获取当前脚本文件的最后修改commit
         local script_file=$(basename "$0")
-        git log -1 --format="%h" -- "$script_file" 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+        local version=$(git log -1 --format="%h" -- "$script_file" 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+        if [[ -n "$version" ]]; then
+            # 存储版本信息
+            mkdir -p "$CONFIG_DIR"
+            echo "$version" > "$version_file"
+            echo "$version"
+        else
+            echo "unknown"
+        fi
     else
         echo "unknown"
     fi
+}
+
+# 保存当前版本信息
+save_current_version() {
+    local version="$1"
+    local version_file="$CONFIG_DIR/current_version"
+
+    mkdir -p "$CONFIG_DIR"
+    echo "$version" > "$version_file"
 }
 
 # 打印Logo
@@ -211,6 +235,8 @@ perform_update() {
     echo -e "${BLUE}🔄 安装新版本...${NC}"
     if cp "$temp_file" "$script_path" && chmod +x "$script_path"; then
         rm -f "$temp_file"
+        # 保存新版本信息
+        save_current_version "$new_version"
         echo -e "${GREEN}✅ 更新成功！已更新到 $new_version${NC}"
         echo -e "${YELLOW}备份文件保存在: $backup_path${NC}"
         echo -e "${CYAN}请重新运行 warpkit 以使用新版本${NC}"

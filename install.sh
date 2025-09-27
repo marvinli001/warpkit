@@ -289,6 +289,30 @@ EOF
     log_success "配置文件创建完成: $config_file"
 }
 
+# 获取最新commit hash并保存版本信息
+save_initial_version() {
+    log_info "保存版本信息..."
+
+    local latest_commit=""
+    local config_dir="$HOME/.config/warpkit"
+    local version_file="$config_dir/current_version"
+
+    # 获取最新commit hash
+    if command -v curl >/dev/null 2>&1; then
+        latest_commit=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/commits/master" | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7 2>/dev/null)
+    elif command -v wget >/dev/null 2>&1; then
+        latest_commit=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/commits/master" | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7 2>/dev/null)
+    fi
+
+    if [[ -n "$latest_commit" ]]; then
+        mkdir -p "$config_dir"
+        echo "$latest_commit" > "$version_file"
+        log_success "版本信息已保存: $latest_commit"
+    else
+        log_warning "无法获取版本信息，跳过"
+    fi
+}
+
 # 验证安装
 verify_installation() {
     log_info "验证安装..."
@@ -296,6 +320,7 @@ verify_installation() {
     local warpkit_path=$(which warpkit 2>/dev/null || echo "")
 
     if [[ -n "$warpkit_path" ]] && [[ -x "$warpkit_path" ]]; then
+        save_initial_version
         log_success "WarpKit安装成功: $warpkit_path"
         log_info "运行 'warpkit' 开始使用"
         return 0
