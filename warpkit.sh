@@ -585,6 +585,9 @@ read_key() {
                         '')
                             debug_log "read_key: 检测到单字符回车"
                             echo "ENTER" ;;
+                        $'\e')
+                            debug_log "read_key: 检测到单独ESC，忽略处理"
+                            echo "OTHER" ;;
                         *)
                             debug_log "read_key: 检测到其他单字符: $(printf '%q' "$key")"
                             echo "OTHER" ;;
