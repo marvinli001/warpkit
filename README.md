@@ -48,10 +48,10 @@
 
 ```bash
 # 使用 curl
-curl -fsSL https://raw.githubusercontent.com/your-username/warpkit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/marvinli001/warpkit/main/install.sh | bash
 
 # 或使用 wget
-wget -qO- https://raw.githubusercontent.com/your-username/warpkit/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/marvinli001/warpkit/main/install.sh | bash
 ```
 
 ### 手动安装
