@@ -159,7 +159,7 @@ download_warpkit() {
 
     # 尝试使用curl下载
     if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$download_url" -o "$temp_file"; then
+        if curl -fsSL "$download_url" -o "$temp_file" >/dev/null 2>&1; then
             log_success "使用curl下载完成"
         else
             log_error "curl下载失败，尝试使用wget"
@@ -179,7 +179,8 @@ download_warpkit() {
         exit 1
     fi
 
-    echo "$temp_file"
+    # 只输出文件路径，不输出日志信息到stdout
+    printf "%s" "$temp_file"
 }
 
 # 使用wget下载
@@ -187,7 +188,7 @@ download_with_wget() {
     local url=$1
     local output=$2
 
-    if wget -q "$url" -O "$output"; then
+    if wget -q "$url" -O "$output" >/dev/null 2>&1; then
         log_success "使用wget下载完成"
     else
         log_error "wget下载失败"
@@ -357,6 +358,8 @@ main_install() {
 
     echo -e "${BOLD}开始安装WarpKit...${NC}"
     echo ""
+
+    local temp_file=""
 
     for i in "${!steps[@]}"; do
         show_progress $((i+1)) ${#steps[@]} "安装进度"
