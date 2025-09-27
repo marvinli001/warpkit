@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # WarpKit - Linux服务运维工具
-# WARPKIT_COMMIT: 72270cf
+# WARPKIT_COMMIT: 0ec9341
 # Author: Claude Code Assistant
 
 set -euo pipefail
