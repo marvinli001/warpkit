@@ -179,7 +179,10 @@ check_for_updates() {
     if commit_compare "$current_commit" "$latest_commit"; then
         echo -e "${GREEN}🎉 发现新版本 $latest_commit（当前版本 $current_commit）${NC}" >&2
         echo -e "${CYAN}是否现在更新？ [y/N] ${NC}" >&2
+        # 临时恢复终端模式进行输入
+        stty echo icanon 2>/dev/null
         read -r response
+        stty -echo -icanon 2>/dev/null
         if [[ "$response" =~ ^[Yy]$ ]]; then
             perform_update "$latest_commit"
         fi
@@ -240,6 +243,10 @@ perform_update() {
         echo -e "${GREEN}✅ 更新成功！已更新到 $new_version${NC}"
         echo -e "${YELLOW}备份文件保存在: $backup_path${NC}"
         echo -e "${CYAN}请重新运行 warpkit 以使用新版本${NC}"
+        echo ""
+        echo "按任意键退出..."
+        stty echo icanon  # 临时恢复终端模式
+        read -n1
         exit 0
     else
         echo -e "${RED}❌ 更新失败，正在恢复备份...${NC}"
@@ -507,7 +514,10 @@ show_main_menu() {
 # 读取单个按键
 read_key() {
     local key
-    read -rsn1 key
+    # 确保终端设置正确
+    stty -echo -icanon 2>/dev/null
+
+    read -rsn1 key 2>/dev/null
 
     case "$key" in
         $'\x1b')  # ESC序列
@@ -530,6 +540,7 @@ read_key() {
             ;;
         '') echo "ENTER" ;;
         $'\n') echo "ENTER" ;;  # 处理换行符
+        $'\r') echo "ENTER" ;;  # 处理回车符
         'q'|'Q') echo "QUIT" ;;
         *) echo "OTHER" ;;
     esac
@@ -825,7 +836,10 @@ install_common_packages() {
 
     echo ""
     echo -e "${CYAN}是否安装这些常用软件包？ [y/N]${NC}"
+    # 临时恢复终端模式进行输入
+    stty echo icanon 2>/dev/null
     read -r response
+    stty -echo -icanon 2>/dev/null
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         echo ""
@@ -870,7 +884,10 @@ search_packages() {
     echo ""
 
     echo -e "${CYAN}请输入要搜索的软件包名称:${NC}"
+    # 临时恢复终端模式进行输入
+    stty echo icanon 2>/dev/null
     read -r search_term
+    stty -echo -icanon 2>/dev/null
 
     if [[ -n "$search_term" ]]; then
         echo ""
@@ -913,7 +930,10 @@ clean_package_cache() {
 
     echo -e "${YELLOW}这将清理软件包管理器的缓存文件${NC}"
     echo -e "${CYAN}是否继续？ [y/N]${NC}"
+    # 临时恢复终端模式进行输入
+    stty echo icanon 2>/dev/null
     read -r response
+    stty -echo -icanon 2>/dev/null
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         echo ""
@@ -1193,7 +1213,10 @@ enable_bbr() {
         echo -e "${YELLOW}当前内核版本过低，需要升级内核${NC}"
         echo ""
         echo -e "${CYAN}是否尝试安装新内核？ [y/N]${NC}"
+        # 临时恢复终端模式进行输入
+        stty echo icanon 2>/dev/null
         read -r install_kernel
+        stty -echo -icanon 2>/dev/null
 
         if [[ "$install_kernel" =~ ^[Yy]$ ]]; then
             install_kernel_for_bbr
@@ -1297,7 +1320,10 @@ disable_bbr() {
     fi
 
     echo -e "${YELLOW}当前BBR已启用，确定要禁用吗？ [y/N]${NC}"
+    # 临时恢复终端模式进行输入
+    stty echo icanon 2>/dev/null
     read -r confirm
+    stty -echo -icanon 2>/dev/null
 
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}取消禁用操作${NC}"
@@ -1678,7 +1704,10 @@ restore_default_dns() {
     if [[ -n "$latest_backup" ]]; then
         echo -e "${YELLOW}发现备份文件: $(basename "$latest_backup")${NC}"
         echo -e "${CYAN}是否恢复此备份？ [y/N]${NC}"
+        # 临时恢复终端模式进行输入
+        stty echo icanon 2>/dev/null
         read -r response
+        stty -echo -icanon 2>/dev/null
 
         if [[ "$response" =~ ^[Yy]$ ]]; then
             cp "$latest_backup" /etc/resolv.conf 2>/dev/null && {
@@ -1990,7 +2019,10 @@ uninstall_warpkit() {
     echo ""
 
     echo -e "${CYAN}确定要卸载WarpKit吗？ [y/N]${NC}"
+    # 临时恢复终端模式进行输入
+    stty echo icanon 2>/dev/null
     read -r response
+    stty -echo -icanon 2>/dev/null
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         echo ""
@@ -2106,7 +2138,10 @@ clean_cache_files() {
 
     echo ""
     echo -e "${CYAN}确定要清理所有缓存文件吗？ [y/N]${NC}"
+    # 临时恢复终端模式进行输入
+    stty echo icanon 2>/dev/null
     read -r response
+    stty -echo -icanon 2>/dev/null
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         echo ""
@@ -2149,11 +2184,13 @@ main() {
     # 每日首次启动时检查更新
     check_for_updates
 
-    # 启用终端原始模式以捕获方向键
-    stty -echo -icanon
-
     # 设置退出时恢复终端
     trap 'stty echo icanon; exit' EXIT INT TERM
+
+    # 启用终端原始模式以捕获方向键
+    # 添加一个小延迟确保终端模式正确设置
+    stty -echo -icanon 2>/dev/null
+    sleep 0.1
 
     # 开始导航
     handle_navigation
