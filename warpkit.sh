@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # WarpKit - Linux服务运维工具
-# WARPKIT_COMMIT: 0ec9341
 # Author: Claude Code Assistant
 
 set -euo pipefail
@@ -35,18 +34,15 @@ declare -r CONFIG_DIR="$HOME/.config/warpkit"
 declare -r CACHE_DIR="$HOME/.cache/warpkit"
 declare -r UPDATE_CHECK_FILE="$CACHE_DIR/last_update_check"
 
-# 动态获取当前版本 (Git commit hash)
+# 获取当前脚本的git commit hash
 get_current_version() {
-    # 尝试从脚本中提取嵌入的commit hash
-    local embedded_hash=$(grep -o "# WARPKIT_COMMIT: [a-f0-9]\{7,\}" "$0" 2>/dev/null | cut -d' ' -f3)
-    if [[ -n "$embedded_hash" ]]; then
-        echo "$embedded_hash"
-        return
-    fi
+    local script_dir=$(dirname "$(readlink -f "$0")")
 
-    # 如果在git仓库中，获取当前commit
-    if git rev-parse --git-dir >/dev/null 2>&1; then
-        git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+    # 检查脚本所在目录是否是git仓库
+    if cd "$script_dir" 2>/dev/null && git rev-parse --git-dir >/dev/null 2>&1; then
+        # 获取当前脚本文件的最后修改commit
+        local script_file=$(basename "$0")
+        git log -1 --format="%h" -- "$script_file" 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "unknown"
     else
         echo "unknown"
     fi
@@ -211,19 +207,14 @@ perform_update() {
         return 1
     fi
 
-    # 更新下载文件中的commit hash
-    echo -e "${BLUE}🔄 更新版本信息...${NC}"
-    sed -i "s/# WARPKIT_COMMIT: [a-f0-9]\{7,\}/# WARPKIT_COMMIT: $new_version/" "$temp_file"
-
     # 替换当前脚本
     echo -e "${BLUE}🔄 安装新版本...${NC}"
     if cp "$temp_file" "$script_path" && chmod +x "$script_path"; then
         rm -f "$temp_file"
         echo -e "${GREEN}✅ 更新成功！已更新到 $new_version${NC}"
         echo -e "${YELLOW}备份文件保存在: $backup_path${NC}"
-        echo -e "${CYAN}重新启动 WarpKit 以使用新版本...${NC}"
-        sleep 2
-        exec "$script_path" "$@"
+        echo -e "${CYAN}请重新运行 warpkit 以使用新版本${NC}"
+        exit 0
     else
         echo -e "${RED}❌ 更新失败，正在恢复备份...${NC}"
         cp "$backup_path" "$script_path"

@@ -20,7 +20,7 @@ declare -r BOLD='\033[1m'
 declare -r NC='\033[0m'
 
 # 配置变量
-declare -r WARPKIT_VERSION="1.0.0"
+declare -r WARPKIT_VERSION="latest"
 declare -r GITHUB_REPO="marvinli001/warpkit"
 declare -r INSTALL_DIR="/usr/local/bin"
 declare -r CONFIG_DIR="$HOME/.config/warpkit"
