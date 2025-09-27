@@ -1,9 +1,13 @@
 #!/bin/bash
 
 # WarpKit 安装脚本
-# 使用方法: curl -fsSL https://raw.githubusercontent.com/your-repo/warpkit/main/install.sh | bash
+# 使用方法: curl -fsSL https://raw.githubusercontent.com/marvinli001/warpkit/master/install.sh | bash
 
 set -euo pipefail
+
+# 设置UTF-8编码支持中文
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 
 # 颜色定义
 declare -r RED='\033[0;31m'
@@ -17,7 +21,7 @@ declare -r NC='\033[0m'
 
 # 配置变量
 declare -r WARPKIT_VERSION="1.0.0"
-declare -r GITHUB_REPO="your-username/warpkit"  # 替换为实际的GitHub仓库
+declare -r GITHUB_REPO="marvinli001/warpkit"
 declare -r INSTALL_DIR="/usr/local/bin"
 declare -r CONFIG_DIR="$HOME/.config/warpkit"
 declare -r SCRIPT_NAME="warpkit"
@@ -65,8 +69,8 @@ show_progress() {
     local remaining=$((width - completed))
 
     printf "\r${CYAN}%s: [" "$message"
-    printf "%${completed}s" | tr ' ' '▓'
-    printf "%${remaining}s" | tr ' ' '░'
+    printf "%${completed}s" | tr ' ' '#'
+    printf "%${remaining}s" | tr ' ' '-'
     printf "] %d%%${NC}" "$percentage"
 
     if [[ $current -eq $total ]]; then
@@ -151,7 +155,7 @@ download_warpkit() {
     log_info "下载WarpKit主脚本..."
 
     local temp_file="/tmp/warpkit_download.sh"
-    local download_url="https://raw.githubusercontent.com/${GITHUB_REPO}/main/warpkit.sh"
+    local download_url="https://raw.githubusercontent.com/${GITHUB_REPO}/master/warpkit.sh"
 
     # 尝试使用curl下载
     if command -v curl >/dev/null 2>&1; then
@@ -331,8 +335,8 @@ show_help() {
     echo "  $0 --help         显示此帮助"
     echo ""
     echo "示例:"
-    echo "  curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPO/main/install.sh | bash"
-    echo "  wget -qO- https://raw.githubusercontent.com/$GITHUB_REPO/main/install.sh | bash"
+    echo "  curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPO/master/install.sh | bash"
+    echo "  wget -qO- https://raw.githubusercontent.com/$GITHUB_REPO/master/install.sh | bash"
     echo ""
 }
 

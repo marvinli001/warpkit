@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+# 设置UTF-8编码支持中文
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
 # 颜色定义
 declare -r RED='\033[0;31m'
 declare -r GREEN='\033[0;32m'
@@ -27,7 +31,7 @@ declare -g ARCH=""
 
 # 更新相关变量
 declare -r WARPKIT_VERSION="1.0.0"
-declare -r GITHUB_REPO="your-username/warpkit"
+declare -r GITHUB_REPO="marvinli001/warpkit"
 declare -r CONFIG_DIR="$HOME/.config/warpkit"
 declare -r CACHE_DIR="$HOME/.cache/warpkit"
 declare -r UPDATE_CHECK_FILE="$CACHE_DIR/last_update_check"
@@ -180,12 +184,12 @@ perform_update() {
     local temp_file="/tmp/warpkit_update.sh"
 
     if command -v curl >/dev/null 2>&1; then
-        if ! curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPO/main/warpkit.sh" -o "$temp_file"; then
+        if ! curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPO/master/warpkit.sh" -o "$temp_file"; then
             echo -e "${RED}❌ 下载失败${NC}"
             return 1
         fi
     elif command -v wget >/dev/null 2>&1; then
-        if ! wget -qO "$temp_file" "https://raw.githubusercontent.com/$GITHUB_REPO/main/warpkit.sh"; then
+        if ! wget -qO "$temp_file" "https://raw.githubusercontent.com/$GITHUB_REPO/master/warpkit.sh"; then
             echo -e "${RED}❌ 下载失败${NC}"
             return 1
         fi

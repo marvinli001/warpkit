@@ -48,17 +48,17 @@
 
 ```bash
 # 使用 curl
-curl -fsSL https://raw.githubusercontent.com/your-username/warpkit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/marvinli001/warpkit/master/install.sh | bash
 
 # 或使用 wget
-wget -qO- https://raw.githubusercontent.com/your-username/warpkit/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/marvinli001/warpkit/master/install.sh | bash
 ```
 
 ### 手动安装
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/warpkit.git
+git clone https://github.com/marvinli001/warpkit.git
 cd warpkit
 
 # 安装到系统
@@ -209,7 +209,7 @@ warpkit/
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/warpkit.git
+git clone https://github.com/marvinli001/warpkit.git
 cd warpkit
 
 # 直接运行
@@ -269,8 +269,8 @@ bash install.sh
 
 如果你发现了 bug 或有功能建议，请通过以下方式反馈：
 
-- [GitHub Issues](https://github.com/your-username/warpkit/issues)
-- [GitHub Discussions](https://github.com/your-username/warpkit/discussions)
+- [GitHub Issues](https://github.com/marvinli001/warpkit/issues)
+- [GitHub Discussions](https://github.com/marvinli001/warpkit/discussions)
 
 ## 📄 许可证
 
@@ -283,9 +283,9 @@ bash install.sh
 
 ## 🔗 相关链接
 
-- [项目主页](https://github.com/your-username/warpkit)
-- [文档网站](https://your-username.github.io/warpkit)
-- [发布页面](https://github.com/your-username/warpkit/releases)
+- [项目主页](https://github.com/marvinli001/warpkit)
+- [文档网站](https://marvinli001.github.io/warpkit)
+- [发布页面](https://github.com/marvinli001/warpkit/releases)
 
 ---
 
