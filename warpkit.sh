@@ -25,6 +25,13 @@ declare -g VERSION=""
 declare -g KERNEL=""
 declare -g ARCH=""
 
+# 更新相关变量
+declare -r WARPKIT_VERSION="1.0.0"
+declare -r GITHUB_REPO="your-username/warpkit"
+declare -r CONFIG_DIR="$HOME/.config/warpkit"
+declare -r CACHE_DIR="$HOME/.cache/warpkit"
+declare -r UPDATE_CHECK_FILE="$CACHE_DIR/last_update_check"
+
 # 打印Logo
 print_logo() {
     clear
@@ -38,6 +45,177 @@ print_logo() {
     echo -e "${NC}"
     echo -e "${YELLOW}Linux服务运维工具 v1.0.0${NC}"
     echo ""
+}
+
+# 检查是否需要更新检测（每日首次运行）
+should_check_update() {
+    local today=$(date +%Y-%m-%d)
+
+    # 创建缓存目录（如果不存在）
+    mkdir -p "$CACHE_DIR"
+
+    # 如果没有检查记录文件，则需要检查
+    if [[ ! -f "$UPDATE_CHECK_FILE" ]]; then
+        return 0
+    fi
+
+    # 读取上次检查日期
+    local last_check_date=$(cat "$UPDATE_CHECK_FILE" 2>/dev/null || echo "")
+
+    # 如果日期不同，需要检查更新
+    if [[ "$last_check_date" != "$today" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+# 记录更新检查时间
+record_update_check() {
+    local today=$(date +%Y-%m-%d)
+    echo "$today" > "$UPDATE_CHECK_FILE"
+}
+
+# 获取GitHub最新版本
+get_latest_version() {
+    local latest_version=""
+
+    # 尝试使用curl获取最新版本
+    if command -v curl >/dev/null 2>&1; then
+        latest_version=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//' 2>/dev/null)
+    # 如果没有curl，尝试wget
+    elif command -v wget >/dev/null 2>&1; then
+        latest_version=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//' 2>/dev/null)
+    fi
+
+    echo "$latest_version"
+}
+
+# 比较版本号
+version_compare() {
+    local current="$1"
+    local latest="$2"
+
+    # 如果版本号相同，返回0（不需要更新）
+    if [[ "$current" == "$latest" ]]; then
+        return 1
+    fi
+
+    # 简单的版本比较（适用于语义化版本）
+    local IFS='.'
+    local current_parts=($current)
+    local latest_parts=($latest)
+
+    # 比较主版本号
+    if [[ ${current_parts[0]:-0} -lt ${latest_parts[0]:-0} ]]; then
+        return 0
+    elif [[ ${current_parts[0]:-0} -gt ${latest_parts[0]:-0} ]]; then
+        return 1
+    fi
+
+    # 比较次版本号
+    if [[ ${current_parts[1]:-0} -lt ${latest_parts[1]:-0} ]]; then
+        return 0
+    elif [[ ${current_parts[1]:-0} -gt ${latest_parts[1]:-0} ]]; then
+        return 1
+    fi
+
+    # 比较修订版本号
+    if [[ ${current_parts[2]:-0} -lt ${latest_parts[2]:-0} ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+# 检查更新
+check_for_updates() {
+    local force_check=${1:-false}
+
+    # 如果不是强制检查且不需要检查更新，则跳过
+    if [[ "$force_check" != "true" ]] && ! should_check_update; then
+        return
+    fi
+
+    echo -e "${YELLOW}🔍 检查更新中...${NC}"
+
+    local latest_version=$(get_latest_version)
+
+    if [[ -z "$latest_version" ]]; then
+        echo -e "${RED}❌ 无法获取最新版本信息，请检查网络连接${NC}"
+        return
+    fi
+
+    if version_compare "$WARPKIT_VERSION" "$latest_version"; then
+        echo -e "${GREEN}🎉 发现新版本 v$latest_version（当前版本 v$WARPKIT_VERSION）${NC}"
+        echo -e "${CYAN}是否现在更新？ [y/N] ${NC}"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            perform_update "$latest_version"
+        fi
+    else
+        if [[ "$force_check" == "true" ]]; then
+            echo -e "${GREEN}✅ 已是最新版本 v$WARPKIT_VERSION${NC}"
+        fi
+    fi
+
+    # 记录检查时间
+    record_update_check
+}
+
+# 执行更新
+perform_update() {
+    local new_version="$1"
+    local script_path="$(readlink -f "$0")"
+    local backup_path="${script_path}.backup.$(date +%Y%m%d_%H%M%S)"
+
+    echo -e "${YELLOW}📦 开始更新到 v$new_version...${NC}"
+
+    # 备份当前脚本
+    echo -e "${BLUE}📋 备份当前版本...${NC}"
+    cp "$script_path" "$backup_path"
+
+    # 下载新版本
+    echo -e "${BLUE}⬇️ 下载新版本...${NC}"
+    local temp_file="/tmp/warpkit_update.sh"
+
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPO/main/warpkit.sh" -o "$temp_file"; then
+            echo -e "${RED}❌ 下载失败${NC}"
+            return 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -qO "$temp_file" "https://raw.githubusercontent.com/$GITHUB_REPO/main/warpkit.sh"; then
+            echo -e "${RED}❌ 下载失败${NC}"
+            return 1
+        fi
+    else
+        echo -e "${RED}❌ 需要 curl 或 wget 来下载更新${NC}"
+        return 1
+    fi
+
+    # 验证下载的文件
+    if [[ ! -s "$temp_file" ]]; then
+        echo -e "${RED}❌ 下载的文件无效${NC}"
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # 替换当前脚本
+    echo -e "${BLUE}🔄 安装新版本...${NC}"
+    if cp "$temp_file" "$script_path" && chmod +x "$script_path"; then
+        rm -f "$temp_file"
+        echo -e "${GREEN}✅ 更新成功！已更新到 v$new_version${NC}"
+        echo -e "${YELLOW}备份文件保存在: $backup_path${NC}"
+        echo -e "${CYAN}重新启动 WarpKit 以使用新版本...${NC}"
+        sleep 2
+        exec "$script_path" "$@"
+    else
+        echo -e "${RED}❌ 更新失败，正在恢复备份...${NC}"
+        cp "$backup_path" "$script_path"
+        rm -f "$temp_file"
+        return 1
+    fi
 }
 
 # 检测Linux发行版
@@ -521,8 +699,75 @@ show_system_update() {
     read -n1
 }
 
+# 显示帮助信息
+show_help() {
+    echo -e "${CYAN}${BOLD}WarpKit - Linux服务运维工具 v$WARPKIT_VERSION${NC}"
+    echo ""
+    echo -e "${YELLOW}用法:${NC}"
+    echo "  warpkit [选项]"
+    echo ""
+    echo -e "${YELLOW}选项:${NC}"
+    echo "  -h, --help        显示此帮助信息"
+    echo "  -v, --version     显示版本信息"
+    echo "  -u, --update      检查并更新到最新版本"
+    echo "  --config          指定配置文件路径"
+    echo "  --theme           设置主题 (default, dark, light)"
+    echo "  --lang            设置语言 (zh_CN, en_US)"
+    echo ""
+    echo -e "${YELLOW}示例:${NC}"
+    echo "  warpkit           # 启动交互式界面"
+    echo "  warpkit --update  # 检查更新"
+    echo "  warpkit --version # 显示版本"
+    echo ""
+}
+
+# 显示版本信息
+show_version() {
+    echo "WarpKit v$WARPKIT_VERSION"
+}
+
+# 处理命令行参数
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                show_version
+                exit 0
+                ;;
+            -u|--update)
+                check_for_updates true
+                exit 0
+                ;;
+            --config)
+                CONFIG_FILE="$2"
+                shift 2
+                ;;
+            --theme)
+                THEME="$2"
+                shift 2
+                ;;
+            --lang)
+                LANGUAGE="$2"
+                shift 2
+                ;;
+            *)
+                echo -e "${RED}未知选项: $1${NC}"
+                echo "使用 --help 查看可用选项"
+                exit 1
+                ;;
+        esac
+    done
+}
+
 # 主函数
 main() {
+    # 处理命令行参数
+    parse_arguments "$@"
+
     # 检查是否在Linux环境中运行
     if [[ "$OSTYPE" != "linux-gnu"* ]]; then
         echo -e "${RED}错误: 此工具只能在Linux系统中运行${NC}"
@@ -531,6 +776,9 @@ main() {
 
     # 检测系统信息
     detect_distro
+
+    # 每日首次启动时检查更新
+    check_for_updates
 
     # 启用终端原始模式以捕获方向键
     stty -echo -icanon time 0 min 0

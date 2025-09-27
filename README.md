@@ -27,6 +27,7 @@
 - 🔧 **多功能集成** - 系统监控、服务管理、包管理等一站式解决方案
 - 🎨 **美观界面** - 丰富的颜色主题和现代化的终端 UI
 - 📦 **一键安装** - 简单的安装脚本，支持全局命令调用
+- 🔄 **自动更新** - 智能更新检测，自动保持最新版本
 
 ## 📋 支持的系统
 
@@ -141,8 +142,11 @@ THEME=default
 # 日志级别 (debug, info, warning, error)
 LOG_LEVEL=info
 
-# 自动更新检查
+# 自动更新检查（每日首次启动时检查）
 AUTO_UPDATE=true
+
+# 更新检查频率（daily, weekly, never）
+UPDATE_FREQUENCY=daily
 
 # 语言设置
 LANGUAGE=zh_CN
@@ -156,9 +160,27 @@ warpkit [选项]
 选项:
   -h, --help     显示帮助信息
   -v, --version  显示版本信息
+  -u, --update   检查并更新到最新版本
   --config       指定配置文件路径
   --theme        设置主题 (default, dark, light)
   --lang         设置语言 (zh_CN, en_US)
+```
+
+### 🔄 自动更新
+
+WarpKit 内置了智能更新系统：
+
+- **📅 每日检查**: 每天首次启动时自动检查更新
+- **🔧 手动更新**: 使用 `warpkit --update` 手动检查更新
+- **🛡️ 安全备份**: 更新前自动备份当前版本
+- **🚀 一键更新**: 发现新版本时可选择立即更新
+
+```bash
+# 检查并更新到最新版本
+warpkit --update
+
+# 查看当前版本
+warpkit --version
 ```
 
 ## 🔧 开发
