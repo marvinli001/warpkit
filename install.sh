@@ -19,8 +19,25 @@ BIN_DIR="$INSTALL_PREFIX/bin"
 LIB_DIR="$INSTALL_PREFIX/lib/warpkit"
 CONFIG_DIR="$HOME/.config/warpkit"
 
-# 脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# GitHub仓库信息
+GITHUB_REPO="marvinli001/warpkit"
+GITHUB_RAW_URL="https://raw.githubusercontent.com/$GITHUB_REPO/master"
+
+# 脚本目录（兼容管道安装）
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="/tmp"
+fi
+
+# 检测安装模式
+if [[ -f "$SCRIPT_DIR/warpkit.sh" ]] && [[ -d "$SCRIPT_DIR/modules" ]]; then
+    INSTALL_MODE="local"
+    echo "检测到本地安装模式"
+else
+    INSTALL_MODE="remote"
+    echo "使用远程安装模式"
+fi
 
 print_header() {
     echo -e "${CYAN}${BOLD}"
@@ -57,13 +74,69 @@ check_permissions() {
     fi
 }
 
+# 下载文件函数
+download_file() {
+    local url="$1"
+    local output="$2"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$output"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$output" "$url"
+    else
+        echo -e "${RED}[ERROR] 需要 curl 或 wget 来下载文件${NC}"
+        return 1
+    fi
+}
+
+# 下载WarpKit文件
+download_warpkit_files() {
+    echo -e "${BLUE}下载WarpKit文件...${NC}"
+
+    local temp_dir="/tmp/warpkit_install_$$"
+    mkdir -p "$temp_dir/modules"
+
+    # 下载主程序
+    echo -e "${CYAN}下载主程序...${NC}"
+    if ! download_file "$GITHUB_RAW_URL/warpkit.sh" "$temp_dir/warpkit.sh"; then
+        echo -e "${RED}[ERROR] 主程序下载失败${NC}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    # 下载模块
+    echo -e "${CYAN}下载功能模块...${NC}"
+    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh")
+    for module in "${modules[@]}"; do
+        echo -e "${CYAN}  下载 $module...${NC}"
+        if ! download_file "$GITHUB_RAW_URL/modules/$module" "$temp_dir/modules/$module"; then
+            echo -e "${RED}[ERROR] 模块 $module 下载失败${NC}"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+    done
+
+    # 更新脚本目录为下载目录
+    SCRIPT_DIR="$temp_dir"
+    echo -e "${GREEN}[OK] 所有文件下载完成${NC}"
+}
+
 install_warpkit() {
     echo -e "${BLUE}安装WarpKit...${NC}"
+
+    # 远程安装模式需要先下载文件
+    if [[ "$INSTALL_MODE" == "remote" ]]; then
+        if ! download_warpkit_files; then
+            return 1
+        fi
+    fi
 
     # 检查必要文件是否存在
     if [[ ! -f "$SCRIPT_DIR/warpkit.sh" ]]; then
         echo -e "${RED}[ERROR] 错误: 找不到 warpkit.sh${NC}"
-        echo -e "${YELLOW}请确保在WarpKit项目目录中运行安装程序${NC}"
+        if [[ "$INSTALL_MODE" == "local" ]]; then
+            echo -e "${YELLOW}请确保在WarpKit项目目录中运行安装程序${NC}"
+        fi
         return 1
     fi
 
@@ -80,6 +153,11 @@ install_warpkit() {
         mkdir -p "$LIB_DIR/modules"
         cp -r "$SCRIPT_DIR/modules/"* "$LIB_DIR/modules/"
         chmod +x "$LIB_DIR/modules/"*.sh
+    fi
+
+    # 清理临时文件（仅远程安装）
+    if [[ "$INSTALL_MODE" == "remote" ]] && [[ "$SCRIPT_DIR" == "/tmp/warpkit_install_"* ]]; then
+        rm -rf "$SCRIPT_DIR"
     fi
 
     echo -e "${GREEN}${BOLD}WarpKit安装完成！${NC}"
