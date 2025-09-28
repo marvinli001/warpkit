@@ -485,6 +485,9 @@ print_menu_item() {
 
 # 显示主菜单
 show_main_menu() {
+    # 关闭errexit避免系统命令失败导致UI退出
+    set +e
+
     MENU_OPTIONS=(
         "系统监控"
         "包管理"
@@ -510,6 +513,9 @@ show_main_menu() {
 
     echo ""
     echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 退出${NC}"
+
+    # 恢复errexit
+    set -e
 }
 
 # 保存和恢复终端状态
@@ -565,13 +571,13 @@ read_key() {
             in_esc_sequence=true
             debug_log "read_key: 进入ESC序列状态"
 
-            # 第二段：用极短超时读取最多2个字节
-            if IFS= read -r -n1 -t 0.01 second_byte 2>/dev/null; then
+            # 第二段：用短超时读取最多2个字节
+            if IFS= read -r -n1 -t 0.1 second_byte 2>/dev/null; then
                 debug_log "read_key: 第二字节: $(printf '%q' "$second_byte")"
 
                 if [[ "$second_byte" == "[" ]]; then
                     # 继续读取第三字节
-                    if IFS= read -r -n1 -t 0.01 third_byte 2>/dev/null; then
+                    if IFS= read -r -n1 -t 0.1 third_byte 2>/dev/null; then
                         debug_log "read_key: 第三字节: $(printf '%q' "$third_byte")"
 
                         # 组装完整序列并检查
@@ -661,10 +667,12 @@ read_key() {
 
 # 处理菜单导航
 handle_navigation() {
+    # 关闭errexit避免UI循环被意外退出
+    set +e
+
     while true; do
         show_main_menu
 
-        flush_input
         flush_input
         local key=$(read_key)
 
@@ -688,6 +696,8 @@ handle_navigation() {
                 ;;
             "QUIT")
                 echo -e "\n${YELLOW}再见！${NC}"
+                restore_terminal_state
+                set -e
                 exit 0
                 ;;
             "OTHER")
@@ -729,6 +739,9 @@ handle_menu_selection() {
 
 # 系统监控演示
 show_system_monitor() {
+    # 关闭errexit避免系统命令失败导致退出
+    set +e
+
     clear
     echo -e "${BLUE}${BOLD}系统监控${NC}"
     echo ""
@@ -736,13 +749,34 @@ show_system_monitor() {
     loading_animation "正在收集系统信息" 2
 
     update_status "info" "显示系统状态"
-    show_command_output "uptime" "获取系统运行时间"
-    show_command_output "free -h" "检查内存使用情况"
-    show_command_output "df -h" "检查磁盘使用情况"
+
+    # 检查uptime命令
+    if command -v uptime >/dev/null 2>&1; then
+        show_command_output "uptime" "获取系统运行时间" || true
+    else
+        echo -e "${YELLOW}⚠️  uptime命令不可用${NC}"
+    fi
+
+    # 检查free命令
+    if command -v free >/dev/null 2>&1; then
+        show_command_output "free -h" "检查内存使用情况" || true
+    else
+        echo -e "${YELLOW}⚠️  free命令不可用${NC}"
+    fi
+
+    # 检查df命令
+    if command -v df >/dev/null 2>&1; then
+        show_command_output "df -h" "检查磁盘使用情况" || true
+    else
+        echo -e "${YELLOW}⚠️  df命令不可用${NC}"
+    fi
 
     echo ""
     echo "按任意键返回主菜单"
     read -n1
+
+    # 恢复errexit
+    set -e
 }
 
 # 检测包管理器
@@ -1860,20 +1894,38 @@ test_dns_resolution() {
     echo ""
     echo -e "${CYAN}DNS解析测试结果:${NC}"
 
-    for domain in "${test_domains[@]}"; do
-        local start_time=$(date +%s%N)
-        if nslookup "$domain" >/dev/null 2>&1; then
-            local end_time=$(date +%s%N)
-            local duration=$(( (end_time - start_time) / 1000000 ))
-            echo -e "${GREEN}  ✅ $domain - ${duration}ms${NC}"
-        else
-            echo -e "${RED}  ❌ $domain - 解析失败${NC}"
-        fi
-    done
+    if command -v nslookup >/dev/null 2>&1; then
+        for domain in "${test_domains[@]}"; do
+            local start_time=$(date +%s%N)
+            if nslookup "$domain" >/dev/null 2>&1; then
+                local end_time=$(date +%s%N)
+                local duration=$(( (end_time - start_time) / 1000000 ))
+                echo -e "${GREEN}  ✅ $domain - ${duration}ms${NC}"
+            else
+                echo -e "${RED}  ❌ $domain - 解析失败${NC}"
+            fi
+        done
+    elif command -v dig >/dev/null 2>&1; then
+        for domain in "${test_domains[@]}"; do
+            local start_time=$(date +%s%N)
+            if dig "$domain" >/dev/null 2>&1; then
+                local end_time=$(date +%s%N)
+                local duration=$(( (end_time - start_time) / 1000000 ))
+                echo -e "${GREEN}  ✅ $domain - ${duration}ms${NC}"
+            else
+                echo -e "${RED}  ❌ $domain - 解析失败${NC}"
+            fi
+        done
+    else
+        echo -e "${YELLOW}⚠️  nslookup和dig命令都不可用，无法进行DNS解析测试${NC}"
+    fi
 }
 
 # 网络连接测试
 test_network_connection() {
+    # 关闭errexit避免网络命令失败导致退出
+    set +e
+
     clear
     echo -e "${BLUE}${BOLD}网络连接测试${NC}"
     echo ""
@@ -1881,26 +1933,58 @@ test_network_connection() {
     loading_animation "初始化网络检测" 1
 
     update_status "info" "网络连接测试"
-    show_command_output "ping -c 3 8.8.8.8" "测试网络连接"
-    show_command_output "ss -tulpn" "显示网络连接状态"
+
+    # 检查ping命令
+    if command -v ping >/dev/null 2>&1; then
+        show_command_output "ping -c 3 8.8.8.8" "测试网络连接" || true
+    else
+        echo -e "${YELLOW}⚠️  ping命令不可用${NC}"
+    fi
+
+    # 检查ss命令
+    if command -v ss >/dev/null 2>&1; then
+        show_command_output "ss -tulpn" "显示网络连接状态" || true
+    elif command -v netstat >/dev/null 2>&1; then
+        show_command_output "netstat -tulpn" "显示网络连接状态" || true
+    else
+        echo -e "${YELLOW}⚠️  ss和netstat命令都不可用${NC}"
+    fi
 
     echo ""
     echo "按任意键返回网络工具菜单"
     read -n1
+
+    # 恢复errexit
+    set -e
 }
 
 # 显示网络配置
 show_network_config() {
+    # 关闭errexit避免网络命令失败导致退出
+    set +e
+
     clear
     echo -e "${BLUE}${BOLD}网络配置查看${NC}"
     echo ""
 
     echo -e "${CYAN}网络接口信息:${NC}"
-    ip addr show | grep -E "(inet |inet6 )" | head -10
+    if command -v ip >/dev/null 2>&1; then
+        ip addr show | grep -E "(inet |inet6 )" | head -10 || true
+    elif command -v ifconfig >/dev/null 2>&1; then
+        ifconfig | grep -E "inet " | head -10 || true
+    else
+        echo -e "${YELLOW}⚠️  ip和ifconfig命令都不可用${NC}"
+    fi
 
     echo ""
     echo -e "${CYAN}路由表信息:${NC}"
-    ip route show | head -5
+    if command -v ip >/dev/null 2>&1; then
+        ip route show | head -5 || true
+    elif command -v route >/dev/null 2>&1; then
+        route -n | head -5 || true
+    else
+        echo -e "${YELLOW}⚠️  ip和route命令都不可用${NC}"
+    fi
 
     echo ""
     echo -e "${CYAN}DNS配置:${NC}"
@@ -1909,10 +1993,16 @@ show_network_config() {
     echo ""
     echo "按任意键返回网络工具菜单"
     read -n1
+
+    # 恢复errexit
+    set -e
 }
 
 # 端口扫描工具
 show_port_scanner() {
+    # 关闭errexit避免网络命令失败导致退出
+    set +e
+
     clear
     echo -e "${BLUE}${BOLD}端口扫描工具${NC}"
     echo ""
@@ -1920,32 +2010,66 @@ show_port_scanner() {
     echo -e "${YELLOW}常用端口检查:${NC}"
     local common_ports=(22 80 443 3306 5432 6379 27017)
 
-    for port in "${common_ports[@]}"; do
-        if ss -tuln | grep -q ":$port "; then
-            echo -e "${GREEN}  ✅ 端口 $port - 开放${NC}"
-        else
-            echo -e "${RED}  ❌ 端口 $port - 关闭${NC}"
-        fi
-    done
+    if command -v ss >/dev/null 2>&1; then
+        for port in "${common_ports[@]}"; do
+            if ss -tuln | grep -q ":$port " 2>/dev/null; then
+                echo -e "${GREEN}  ✅ 端口 $port - 开放${NC}"
+            else
+                echo -e "${RED}  ❌ 端口 $port - 关闭${NC}"
+            fi
+        done
+    elif command -v netstat >/dev/null 2>&1; then
+        for port in "${common_ports[@]}"; do
+            if netstat -tuln | grep -q ":$port " 2>/dev/null; then
+                echo -e "${GREEN}  ✅ 端口 $port - 开放${NC}"
+            else
+                echo -e "${RED}  ❌ 端口 $port - 关闭${NC}"
+            fi
+        done
+    else
+        echo -e "${YELLOW}⚠️  ss和netstat命令都不可用，无法检查端口状态${NC}"
+    fi
 
     echo ""
     echo "按任意键返回网络工具菜单"
     read -n1
+
+    # 恢复errexit
+    set -e
 }
 
 # 日志查看演示
 show_log_viewer() {
+    # 关闭errexit避免日志命令失败导致退出
+    set +e
+
     clear
     echo -e "${BLUE}${BOLD}日志查看${NC}"
     echo ""
 
     loading_animation "准备日志查看器" 1
 
-    show_command_output "journalctl -n 10 --no-pager" "显示最近的系统日志"
+    # 检查journalctl命令
+    if command -v journalctl >/dev/null 2>&1; then
+        show_command_output "journalctl -n 10 --no-pager" "显示最近的系统日志" || true
+    elif [[ -f /var/log/messages ]]; then
+        show_command_output "tail -n 10 /var/log/messages" "显示系统日志" || true
+    elif [[ -f /var/log/syslog ]]; then
+        show_command_output "tail -n 10 /var/log/syslog" "显示系统日志" || true
+    else
+        echo -e "${YELLOW}⚠️  journalctl命令不可用，且未找到常见日志文件${NC}"
+        echo -e "${CYAN}可能的日志位置:${NC}"
+        echo "  • /var/log/messages"
+        echo "  • /var/log/syslog"
+        echo "  • /var/log/kern.log"
+    fi
 
     echo ""
     echo "按任意键返回主菜单"
     read -n1
+
+    # 恢复errexit
+    set -e
 }
 
 # 系统更新演示
