@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # WarpKit 安装脚本
-# 默认安装完整版本
 
 set -euo pipefail
 
@@ -58,10 +57,17 @@ check_permissions() {
     fi
 }
 
-install_basic() {
-    echo -e "${BLUE}安装基础版本...${NC}"
+install_warpkit() {
+    echo -e "${BLUE}安装WarpKit...${NC}"
 
-    # 创建目录
+    # 检查必要文件是否存在
+    if [[ ! -f "$SCRIPT_DIR/warpkit.sh" ]]; then
+        echo -e "${RED}[ERROR] 错误: 找不到 warpkit.sh${NC}"
+        echo -e "${YELLOW}请确保在WarpKit项目目录中运行安装程序${NC}"
+        return 1
+    fi
+
+    # 创建必要目录
     mkdir -p "$BIN_DIR"
     mkdir -p "$CONFIG_DIR"
 
@@ -69,33 +75,14 @@ install_basic() {
     cp "$SCRIPT_DIR/warpkit.sh" "$BIN_DIR/warpkit"
     chmod +x "$BIN_DIR/warpkit"
 
-    echo -e "${GREEN}✅ 基础版本安装完成${NC}"
-    echo -e "${CYAN}主程序路径: $BIN_DIR/warpkit${NC}"
-}
-
-install_modules() {
-    echo -e "${BLUE}安装增强功能...${NC}"
-
-    # 创建程序目录
-    mkdir -p "$LIB_DIR/modules"
-
-    # 复制功能文件
+    # 复制程序组件（modules目录）
     if [[ -d "$SCRIPT_DIR/modules" ]]; then
+        mkdir -p "$LIB_DIR/modules"
         cp -r "$SCRIPT_DIR/modules/"* "$LIB_DIR/modules/"
         chmod +x "$LIB_DIR/modules/"*.sh
-
-        echo -e "${GREEN}✅ 增强功能安装完成${NC}"
-    else
-        echo -e "${RED}❌ 未找到功能文件${NC}"
-        return 1
     fi
-}
 
-install_full() {
-    echo -e "${BLUE}安装WarpKit...${NC}"
-    install_basic
-    install_modules
-    echo -e "${GREEN}${BOLD}🎉 WarpKit安装完成！${NC}"
+    echo -e "${GREEN}${BOLD}WarpKit安装完成！${NC}"
 }
 
 uninstall_warpkit() {
@@ -122,7 +109,7 @@ uninstall_warpkit() {
         echo -e "${YELLOW}配置目录已删除${NC}"
     fi
 
-    echo -e "${GREEN}✅ 卸载完成${NC}"
+    echo -e "${GREEN}[SUCCESS] 卸载完成${NC}"
 }
 
 verify_installation() {
@@ -137,36 +124,51 @@ verify_installation() {
     fi
 
     if [[ -n "$warpkit_path" ]]; then
-        echo -e "${GREEN}✅ 主程序: $warpkit_path${NC}"
+        echo -e "${GREEN}[OK] 主程序: $warpkit_path${NC}"
 
         # 测试版本
         local version=$("$warpkit_path" --version 2>/dev/null || echo "unknown")
         echo -e "${CYAN}   版本: $version${NC}"
     else
-        echo -e "${RED}❌ 主程序未找到${NC}"
+        echo -e "${RED}[ERROR] 主程序未找到${NC}"
         return 1
     fi
 
-    # 检查模块
-    local module_dirs=(
+    # 程序完整性检查
+    local component_dirs=(
         "$LIB_DIR/modules"
         "$HOME/.local/lib/warpkit/modules"
     )
 
-    local modules_found=false
-    for dir in "${module_dirs[@]}"; do
+    local components_found=false
+    for dir in "${component_dirs[@]}"; do
         if [[ -d "$dir" ]]; then
-            local module_count=$(find "$dir" -name "*.sh" | wc -l)
-            if [[ $module_count -gt 0 ]]; then
-                echo -e "${GREEN}✅ 功能目录: $dir ($module_count 个功能)${NC}"
-                modules_found=true
-                break
+            local required_components=("system.sh" "packages.sh" "network.sh" "logs.sh")
+            local missing_components=()
+
+            for component in "${required_components[@]}"; do
+                if [[ ! -f "$dir/$component" ]]; then
+                    missing_components+=("$component")
+                fi
+            done
+
+            if [[ ${#missing_components[@]} -eq 0 ]]; then
+                echo -e "${GREEN}[OK] 程序完整性检查通过${NC}"
+                components_found=true
+            else
+                echo -e "${RED}[ERROR] 程序不完整，缺少组件:${NC}"
+                for missing in "${missing_components[@]}"; do
+                    echo -e "${RED}   - $missing${NC}"
+                done
+                return 1
             fi
+            break
         fi
     done
 
-    if [[ "$modules_found" == "false" ]]; then
-        echo -e "${YELLOW}⚠️  基础版本（只包含核心功能）${NC}"
+    if [[ "$components_found" == "false" ]]; then
+        echo -e "${RED}[ERROR] 未找到程序组件目录${NC}"
+        return 1
     fi
 
     echo ""
@@ -192,14 +194,12 @@ post_install_info() {
     echo "  warpkit --version # 查看版本"
     echo ""
 
-    if [[ -d "$LIB_DIR/modules" ]] || [[ -d "$HOME/.local/lib/warpkit/modules" ]]; then
-        echo -e "${GREEN}增强功能:${NC}"
-        echo "  - 系统监控增强功能"
-        echo "  - 智能包管理"
-        echo "  - 网络诊断工具"
-        echo "  - 日志分析工具"
-        echo ""
-    fi
+    echo -e "${GREEN}主要功能:${NC}"
+    echo "  - 系统监控 (实时状态、进程管理、内存分析)"
+    echo "  - 包管理 (智能搜索、依赖分析、安全检查)"
+    echo "  - 网络工具 (诊断、SSL检查、防火墙管理)"
+    echo "  - 日志分析 (实时监控、搜索、统计)"
+    echo ""
 
     echo -e "${CYAN}配置目录: $CONFIG_DIR${NC}"
     echo -e "${CYAN}GitHub: https://github.com/marvinli001/warpkit${NC}"
@@ -217,7 +217,7 @@ main() {
             ;;
         "")
             check_permissions
-            install_full
+            install_warpkit
             verify_installation
             post_install_info
             ;;

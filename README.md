@@ -11,7 +11,7 @@
  ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝   ╚═╝
 ```
 
-**🚀 现代化的 Linux 服务运维工具**
+**现代化的 Linux 服务运维工具**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/Platform-Linux-blue.svg)](https://www.linux.org/)
@@ -19,30 +19,30 @@
 
 </div>
 
-## 🌟 特性
+## 特性
 
-- 🎯 **智能检测** - 自动识别 Linux 发行版、内核版本和系统架构
-- 🎮 **交互式界面** - 类似 Claude Code CLI 的方向键导航体验
-- 📊 **动态显示** - 实时进度条、状态更新和加载动画
-- 🔧 **多功能集成** - 系统监控、服务管理、包管理等一站式解决方案
-- 🎨 **美观界面** - 丰富的颜色主题和现代化的终端 UI
-- 📦 **一键安装** - 简单的安装脚本，支持全局命令调用
-- 🔄 **自动更新** - 智能更新检测，自动保持最新版本
+- **智能检测** - 自动识别 Linux 发行版、内核版本和系统架构
+- **交互式界面** - 类似 Claude Code CLI 的方向键导航体验
+- **动态显示** - 实时进度条、状态更新和加载动画
+- **多功能集成** - 系统监控、服务管理、包管理等一站式解决方案
+- **美观界面** - 丰富的颜色主题和现代化的终端 UI
+- **一键安装** - 简单的安装脚本，支持全局命令调用
+- **自动更新** - 智能更新检测，自动保持最新版本
 
-## 📋 支持的系统
+## 支持的系统
 
 | 发行版 | 版本 | 状态 |
 |--------|------|------|
-| Ubuntu | 18.04+ | ✅ 完全支持 |
-| Debian | 9+ | ✅ 完全支持 |
-| CentOS | 7+ | ✅ 完全支持 |
-| RHEL | 7+ | ✅ 完全支持 |
-| Fedora | 30+ | ✅ 完全支持 |
-| Arch Linux | Rolling | ✅ 完全支持 |
-| SUSE/openSUSE | 15+ | ✅ 完全支持 |
-| Alpine Linux | 3.10+ | ✅ 完全支持 |
+| Ubuntu | 18.04+ | 完全支持 |
+| Debian | 9+ | 完全支持 |
+| CentOS | 7+ | 完全支持 |
+| RHEL | 7+ | 完全支持 |
+| Fedora | 30+ | 完全支持 |
+| Arch Linux | Rolling | 完全支持 |
+| SUSE/openSUSE | 15+ | 完全支持 |
+| Alpine Linux | 3.10+ | 完全支持 |
 
-## 🚀 快速开始
+## 快速开始
 
 ### 一键安装
 
@@ -61,14 +61,22 @@ wget -qO- https://raw.githubusercontent.com/marvinli001/warpkit/master/install.s
 git clone https://github.com/marvinli001/warpkit.git
 cd warpkit
 
-# 安装到系统
-sudo cp warpkit.sh /usr/local/bin/warpkit
-sudo chmod +x /usr/local/bin/warpkit
+# 推荐使用安装脚本
+sudo bash install.sh
 
-# 或安装到用户目录
-mkdir -p ~/.local/bin
+# 或手动安装到系统
+sudo cp warpkit.sh /usr/local/bin/warpkit
+sudo mkdir -p /usr/local/lib/warpkit
+sudo cp -r modules /usr/local/lib/warpkit/
+sudo chmod +x /usr/local/bin/warpkit
+sudo chmod +x /usr/local/lib/warpkit/modules/*.sh
+
+# 或手动安装到用户目录
+mkdir -p ~/.local/bin ~/.local/lib/warpkit
 cp warpkit.sh ~/.local/bin/warpkit
+cp -r modules ~/.local/lib/warpkit/
 chmod +x ~/.local/bin/warpkit
+chmod +x ~/.local/lib/warpkit/modules/*.sh
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
@@ -79,7 +87,7 @@ source ~/.bashrc
 warpkit --version
 ```
 
-## 🎮 使用方法
+## 使用方法
 
 ### 启动 WarpKit
 
@@ -95,43 +103,43 @@ warpkit
 
 ### 主要功能
 
-#### 🖥️ 系统监控
+#### 系统监控
 - 实时系统状态显示
 - 内存使用情况
 - 磁盘空间监控
 - 系统负载信息
 
-#### ⚙️ 服务管理
+#### 服务管理
 - 查看系统服务状态
 - 启动/停止/重启服务
 - 服务配置管理
 - 自启动设置
 
-#### 📦 包管理
+#### 包管理
 - 自动检测包管理器 (apt, yum, pacman 等)
 - 软件包搜索和安装
 - 系统更新检查
 - 依赖关系分析
 
-#### 🌐 网络工具
+#### 网络工具
 - 网络连接测试
 - 端口扫描
 - 网络配置查看
 - 防火墙状态检查
 
-#### 🔒 安全工具
+#### 安全工具
 - 登录历史分析
 - 系统日志检查
 - 文件权限验证
 - 安全配置审计
 
-#### 📝 日志查看
+#### 日志查看
 - 系统日志实时查看
 - 日志过滤和搜索
 - 多种日志格式支持
 - 日志导出功能
 
-## 🛠️ 配置
+## 配置
 
 WarpKit 的配置文件位于 `~/.config/warpkit/config.conf`
 
@@ -152,7 +160,7 @@ UPDATE_FREQUENCY=daily
 LANGUAGE=zh_CN
 ```
 
-## 📚 命令行选项
+## 命令行选项
 
 ```bash
 warpkit [选项]
@@ -166,14 +174,14 @@ warpkit [选项]
   --lang         设置语言 (zh_CN, en_US)
 ```
 
-### 🔄 自动更新
+### 自动更新
 
 WarpKit 内置了智能更新系统：
 
-- **📅 每日检查**: 每天首次启动时自动检查更新
-- **🔧 手动更新**: 使用 `warpkit --update` 手动检查更新
-- **🛡️ 安全备份**: 更新前自动备份当前版本
-- **🚀 一键更新**: 发现新版本时可选择立即更新
+- **每日检查**: 每天首次启动时自动检查更新
+- **手动更新**: 使用 `warpkit --update` 手动检查更新
+- **安全备份**: 更新前自动备份当前版本
+- **一键更新**: 发现新版本时可选择立即更新
 
 ```bash
 # 检查并更新到最新版本
@@ -183,7 +191,7 @@ warpkit --update
 warpkit --version
 ```
 
-## 🔧 开发
+## 开发
 
 ### 项目结构
 
@@ -229,7 +237,7 @@ bash install.sh
 ./tests/compatibility_test.sh
 ```
 
-## 🤝 贡献
+## 贡献
 
 欢迎贡献代码！请遵循以下步骤：
 
@@ -246,42 +254,42 @@ bash install.sh
 - 更新相关文档
 - 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范
 
-## 📝 更新日志
+## 更新日志
 
 查看 [CHANGELOG.md](CHANGELOG.md) 了解详细的版本更新信息。
 
 ### v1.0.0 (2024-XX-XX)
 
 #### 新增
-- 🎉 初始版本发布
-- ✨ 支持主流 Linux 发行版自动检测
-- ✨ 交互式方向键导航界面
-- ✨ 动态进度条和状态显示
-- ✨ 系统监控功能
-- ✨ 服务管理功能
-- ✨ 包管理功能
-- ✨ 网络工具集
-- ✨ 安全工具集
-- ✨ 日志查看器
-- ✨ 一键安装脚本
+- 初始版本发布
+- 支持主流 Linux 发行版自动检测
+- 交互式方向键导航界面
+- 动态进度条和状态显示
+- 系统监控功能
+- 服务管理功能
+- 包管理功能
+- 网络工具集
+- 安全工具集
+- 日志查看器
+- 一键安装脚本
 
-## 🐛 问题反馈
+## 问题反馈
 
 如果你发现了 bug 或有功能建议，请通过以下方式反馈：
 
 - [GitHub Issues](https://github.com/marvinli001/warpkit/issues)
 - [GitHub Discussions](https://github.com/marvinli001/warpkit/discussions)
 
-## 📄 许可证
+## 许可证
 
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
-## 🙏 致谢
+## 致谢
 
 - 感谢 [Claude Code CLI](https://claude.ai/code) 提供的交互设计灵感
 - 感谢所有开源社区的贡献者
 
-## 🔗 相关链接
+## 相关链接
 
 - [项目主页](https://github.com/marvinli001/warpkit)
 - [文档网站](https://marvinli001.github.io/warpkit)
@@ -291,6 +299,6 @@ bash install.sh
 
 <div align="center">
 
-**如果这个项目对你有帮助，请给个 ⭐️ Star 支持一下！**
+**如果这个项目对你有帮助，请给个 Star 支持一下！**
 
 </div>
