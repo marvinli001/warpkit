@@ -534,7 +534,7 @@ restore_terminal_state() {
 
 # 设置原始终端模式
 set_raw_terminal() {
-    stty -echo -icanon min 0 time 1 2>/dev/null
+    stty -echo -icanon min 1 time 0 2>/dev/null
 }
 
 # 调试输出
@@ -627,8 +627,8 @@ read_key() {
             # 处理非ESC的第一字节
             case "$first_byte" in
                 '')
-                    debug_log "read_key: 空字符回车"
-                    echo "ENTER"
+                    debug_log "read_key: 空读/超时，忽略"
+                    echo "OTHER"
                     return 0
                     ;;
                 $'\n')
