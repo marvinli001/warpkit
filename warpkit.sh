@@ -647,9 +647,9 @@ codex_selector() {
 
     # 检查是否是TTY
     if [[ ! -t 0 || ! -t 1 ]]; then
-        debug_log "非交互式终端，返回默认选择"
-        echo "$initial_index"
-        return 0
+        debug_log "非交互式终端，切换到文本菜单模式"
+        echo "SELECTOR_ERROR"
+        return 1
     fi
 
     # 保存终端状态并设置原始模式
@@ -936,9 +936,14 @@ show_main_menu() {
 
     # 处理选择结果
     case "$result" in
-        "CANCELLED"|"SELECTOR_ERROR")
-            debug_log "show_main_menu: 用户取消或选择器错误"
+        "CANCELLED")
+            debug_log "show_main_menu: 用户取消"
             return 1
+            ;;
+        "SELECTOR_ERROR")
+            debug_log "show_main_menu: 选择器错误，切换到文本菜单"
+            show_text_menu
+            return 0
             ;;
         [0-9]*)
             # 更新当前选择
@@ -952,6 +957,60 @@ show_main_menu() {
             return 1
             ;;
     esac
+}
+
+# 文本菜单模式（当交互式选择器不可用时）
+show_text_menu() {
+    while true; do
+        clear
+        print_logo
+        show_system_info
+
+        echo -e "${CYAN}${BOLD}主菜单${NC}"
+        echo ""
+        echo "1. 系统监控"
+        echo "2. 包管理"
+        echo "3. 网络工具"
+        echo "4. 日志查看"
+        echo "5. 脚本管理"
+        echo "6. 退出"
+        echo ""
+        echo -n "请选择功能 (1-6): "
+
+        read -r choice
+        echo ""
+
+        case "$choice" in
+            1)
+                CURRENT_SELECTION=0
+                handle_menu_selection
+                ;;
+            2)
+                CURRENT_SELECTION=1
+                handle_menu_selection
+                ;;
+            3)
+                CURRENT_SELECTION=2
+                handle_menu_selection
+                ;;
+            4)
+                CURRENT_SELECTION=3
+                handle_menu_selection
+                ;;
+            5)
+                CURRENT_SELECTION=4
+                handle_menu_selection
+                ;;
+            6)
+                echo -e "${YELLOW}再见！${NC}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}无效选择，请输入 1-6${NC}"
+                sleep 2
+                ;;
+        esac
+    done
 }
 
 # 全局终端状态变量
