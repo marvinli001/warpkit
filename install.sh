@@ -1,36 +1,29 @@
 #!/bin/bash
 
 # WarpKit 安装脚本
-# 使用方法: curl -fsSL https://raw.githubusercontent.com/marvinli001/warpkit/master/install.sh | bash
+# 默认安装完整版本
 
 set -euo pipefail
 
-# 设置UTF-8编码支持中文
-export LANG=C.UTF-8
-export LC_ALL=C.UTF-8
-
 # 颜色定义
-declare -r RED='\033[0;31m'
-declare -r GREEN='\033[0;32m'
-declare -r YELLOW='\033[0;33m'
-declare -r BLUE='\033[0;34m'
-declare -r PURPLE='\033[0;35m'
-declare -r CYAN='\033[0;36m'
-declare -r BOLD='\033[1m'
-declare -r NC='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
 
-# 配置变量
-declare -r WARPKIT_VERSION="latest"
-declare -r GITHUB_REPO="marvinli001/warpkit"
-declare -r INSTALL_DIR="/usr/local/bin"
-declare -r CONFIG_DIR="$HOME/.config/warpkit"
-declare -r SCRIPT_NAME="warpkit"
+# 安装路径
+INSTALL_PREFIX="/usr/local"
+BIN_DIR="$INSTALL_PREFIX/bin"
+LIB_DIR="$INSTALL_PREFIX/lib/warpkit"
+CONFIG_DIR="$HOME/.config/warpkit"
 
-# 全局变量
-declare -g TEMP_FILE=""
+# 脚本目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 打印Logo
-print_logo() {
+print_header() {
     echo -e "${CYAN}${BOLD}"
     echo "██╗    ██╗ █████╗ ██████╗ ██████╗ ██╗  ██╗██╗████████╗"
     echo "██║    ██║██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██║╚══██╔══╝"
@@ -39,398 +32,208 @@ print_logo() {
     echo "╚███╔███╔╝██║  ██║██║  ██║██║     ██║  ██╗██║   ██║   "
     echo " ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝   ╚═╝   "
     echo -e "${NC}"
-    echo -e "${YELLOW}WarpKit 安装程序 v${WARPKIT_VERSION}${NC}"
+    echo -e "${YELLOW}WarpKit 安装程序${NC}"
     echo ""
 }
 
-# 状态信息
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1" >&2
+print_usage() {
+    echo "用法: $0 [选项]"
+    echo ""
+    echo "选项:"
+    echo "  --uninstall  卸载 WarpKit"
+    echo "  --help       显示此帮助"
+    echo ""
+    echo "安装位置:"
+    echo "  程序:   $BIN_DIR/warpkit"
+    echo "  配置:   $CONFIG_DIR/"
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1" >&2
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1" >&2
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1" >&2
-}
-
-# 进度条
-show_progress() {
-    local current=$1
-    local total=$2
-    local message=${3:-"安装中"}
-    local width=40
-
-    local percentage=$((current * 100 / total))
-    local completed=$((current * width / total))
-    local remaining=$((width - completed))
-
-    printf "\r${CYAN}%s: [" "$message"
-    printf "%${completed}s" | tr ' ' '#'
-    printf "%${remaining}s" | tr ' ' '-'
-    printf "] %d%%${NC}" "$percentage"
-
-    if [[ $current -eq $total ]]; then
-        echo ""
-    fi
-}
-
-# 检查系统要求
-check_requirements() {
-    log_info "检查系统要求..."
-
-    # 检查操作系统
-    if [[ "$OSTYPE" != "linux-gnu"* ]]; then
-        log_error "WarpKit 只支持 Linux 系统"
-        exit 1
-    fi
-
-    # 检查必要命令
-    local required_commands=("curl" "wget" "bash")
-    for cmd in "${required_commands[@]}"; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
-            log_error "缺少必要命令: $cmd"
-            exit 1
-        fi
-    done
-
-    # 检查权限
+check_permissions() {
     if [[ $EUID -eq 0 ]]; then
-        log_warning "检测到以root用户运行，将安装到系统目录"
+        echo -e "${YELLOW}检测到root权限，将安装到系统目录${NC}"
     else
-        log_info "以普通用户运行，将安装到用户目录"
-        INSTALL_DIR="$HOME/.local/bin"
+        echo -e "${YELLOW}非root用户，将安装到用户目录${NC}"
+        BIN_DIR="$HOME/.local/bin"
+        LIB_DIR="$HOME/.local/lib/warpkit"
     fi
-
-    log_success "系统要求检查完成"
 }
 
-# 检测Linux发行版
-detect_distro() {
-    log_info "检测Linux发行版..."
+install_basic() {
+    echo -e "${BLUE}安装基础版本...${NC}"
 
-    local distro="unknown"
-    local version="unknown"
+    # 创建目录
+    mkdir -p "$BIN_DIR"
+    mkdir -p "$CONFIG_DIR"
 
-    if [[ -f /etc/os-release ]]; then
-        source /etc/os-release
-        distro="$ID"
-        version="${VERSION_ID:-$VERSION}"
-    elif [[ -f /etc/lsb-release ]]; then
-        source /etc/lsb-release
-        distro=$(echo "$DISTRIB_ID" | tr '[:upper:]' '[:lower:]')
-        version="$DISTRIB_RELEASE"
-    fi
+    # 复制主程序
+    cp "$SCRIPT_DIR/warpkit.sh" "$BIN_DIR/warpkit"
+    chmod +x "$BIN_DIR/warpkit"
 
-    log_success "检测到发行版: $distro $version"
+    echo -e "${GREEN}✅ 基础版本安装完成${NC}"
+    echo -e "${CYAN}主程序路径: $BIN_DIR/warpkit${NC}"
 }
 
-# 创建目录
-create_directories() {
-    log_info "创建安装目录..."
+install_modules() {
+    echo -e "${BLUE}安装增强功能...${NC}"
 
-    # 创建安装目录
-    if [[ ! -d "$INSTALL_DIR" ]]; then
-        mkdir -p "$INSTALL_DIR" || {
-            log_error "无法创建安装目录: $INSTALL_DIR"
-            exit 1
-        }
-    fi
+    # 创建程序目录
+    mkdir -p "$LIB_DIR/modules"
 
-    # 创建配置目录
-    if [[ ! -d "$CONFIG_DIR" ]]; then
-        mkdir -p "$CONFIG_DIR" || {
-            log_warning "无法创建配置目录: $CONFIG_DIR"
-        }
-    fi
+    # 复制功能文件
+    if [[ -d "$SCRIPT_DIR/modules" ]]; then
+        cp -r "$SCRIPT_DIR/modules/"* "$LIB_DIR/modules/"
+        chmod +x "$LIB_DIR/modules/"*.sh
 
-    log_success "目录创建完成"
-}
-
-# 下载WarpKit脚本
-download_warpkit() {
-    log_info "下载WarpKit主脚本..."
-
-    TEMP_FILE="/tmp/warpkit_download.sh"
-    local download_url="https://raw.githubusercontent.com/${GITHUB_REPO}/master/warpkit.sh"
-
-    # 尝试使用curl下载
-    if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL "$download_url" -o "$TEMP_FILE"; then
-            log_success "使用curl下载完成"
-        else
-            log_error "curl下载失败，尝试使用wget"
-            download_with_wget "$download_url" "$TEMP_FILE"
-        fi
-    # 否则使用wget
-    elif command -v wget >/dev/null 2>&1; then
-        download_with_wget "$download_url" "$TEMP_FILE"
+        echo -e "${GREEN}✅ 增强功能安装完成${NC}"
     else
-        log_error "无法找到curl或wget下载工具"
-        exit 1
-    fi
-
-    # 验证下载文件
-    if [[ ! -f "$TEMP_FILE" ]] || [[ ! -s "$TEMP_FILE" ]]; then
-        log_error "下载文件验证失败"
-        exit 1
-    fi
-}
-
-# 使用wget下载
-download_with_wget() {
-    local url=$1
-    local output=$2
-
-    if wget -q "$url" -O "$output"; then
-        log_success "使用wget下载完成"
-    else
-        log_error "wget下载失败"
-        exit 1
-    fi
-}
-
-# 安装脚本
-install_script() {
-    local temp_file=$1
-    local target_file="$INSTALL_DIR/$SCRIPT_NAME"
-
-    log_info "安装WarpKit到 $target_file..."
-
-    # 复制文件
-    if cp "$temp_file" "$target_file"; then
-        log_success "脚本复制完成"
-    else
-        log_error "脚本复制失败"
-        exit 1
-    fi
-
-    # 设置执行权限
-    if chmod +x "$target_file"; then
-        log_success "权限设置完成"
-    else
-        log_error "权限设置失败"
-        exit 1
-    fi
-
-    # 清理临时文件
-    rm -f "$temp_file"
-}
-
-# 配置PATH环境变量
-configure_path() {
-    log_info "配置PATH环境变量..."
-
-    # 检查是否已在PATH中
-    if echo "$PATH" | grep -q "$INSTALL_DIR"; then
-        log_success "安装目录已在PATH中"
-        return
-    fi
-
-    # 确定shell配置文件
-    local shell_config=""
-    case "$SHELL" in
-        */bash)
-            shell_config="$HOME/.bashrc"
-            [[ -f "$HOME/.bash_profile" ]] && shell_config="$HOME/.bash_profile"
-            ;;
-        */zsh)
-            shell_config="$HOME/.zshrc"
-            ;;
-        */fish)
-            shell_config="$HOME/.config/fish/config.fish"
-            ;;
-        *)
-            shell_config="$HOME/.profile"
-            ;;
-    esac
-
-    # 添加到PATH
-    if [[ -n "$shell_config" ]] && [[ -w "$shell_config" ]]; then
-        echo "" >> "$shell_config"
-        echo "# WarpKit PATH" >> "$shell_config"
-        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$shell_config"
-        log_success "PATH配置已添加到 $shell_config"
-        log_warning "请运行 'source $shell_config' 或重新打开终端来生效"
-    else
-        log_warning "无法自动配置PATH，请手动添加 $INSTALL_DIR 到PATH环境变量"
-    fi
-}
-
-# 创建配置文件
-create_config() {
-    log_info "创建配置文件..."
-
-    local config_file="$CONFIG_DIR/config.conf"
-
-    cat > "$config_file" << 'EOF'
-# WarpKit 配置文件
-# 创建时间: $(date)
-
-# 主题设置
-THEME=default
-
-# 日志级别 (debug, info, warning, error)
-LOG_LEVEL=info
-
-# 自动更新检查
-AUTO_UPDATE=true
-
-# 语言设置
-LANGUAGE=zh_CN
-EOF
-
-    log_success "配置文件创建完成: $config_file"
-}
-
-# 获取最新commit hash并保存版本信息
-save_initial_version() {
-    log_info "保存版本信息..."
-
-    local latest_commit=""
-    local config_dir="$HOME/.config/warpkit"
-    local version_file="$config_dir/current_version"
-
-    # 获取最新commit hash
-    if command -v curl >/dev/null 2>&1; then
-        latest_commit=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/commits/master" | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7 2>/dev/null)
-    elif command -v wget >/dev/null 2>&1; then
-        latest_commit=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/commits/master" | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7 2>/dev/null)
-    fi
-
-    if [[ -n "$latest_commit" ]]; then
-        mkdir -p "$config_dir"
-        echo "$latest_commit" > "$version_file"
-        log_success "版本信息已保存: $latest_commit"
-    else
-        log_warning "无法获取版本信息，跳过"
-    fi
-}
-
-# 验证安装
-verify_installation() {
-    log_info "验证安装..."
-
-    local warpkit_path=$(which warpkit 2>/dev/null || echo "")
-
-    if [[ -n "$warpkit_path" ]] && [[ -x "$warpkit_path" ]]; then
-        save_initial_version
-        log_success "WarpKit安装成功: $warpkit_path"
-        log_info "运行 'warpkit' 开始使用"
-        return 0
-    else
-        log_warning "WarpKit安装完成，但未在PATH中找到"
-        log_info "请确保 $INSTALL_DIR 在你的PATH环境变量中"
-        log_info "或直接运行: $INSTALL_DIR/$SCRIPT_NAME"
+        echo -e "${RED}❌ 未找到功能文件${NC}"
         return 1
     fi
 }
 
-# 卸载功能
-uninstall() {
-    echo -e "${YELLOW}开始卸载WarpKit...${NC}"
-
-    # 删除脚本文件
-    if [[ -f "$INSTALL_DIR/$SCRIPT_NAME" ]]; then
-        rm -f "$INSTALL_DIR/$SCRIPT_NAME"
-        log_success "删除主脚本"
-    fi
-
-    # 删除配置目录
-    if [[ -d "$CONFIG_DIR" ]]; then
-        rm -rf "$CONFIG_DIR"
-        log_success "删除配置目录"
-    fi
-
-    log_success "WarpKit卸载完成"
+install_full() {
+    echo -e "${BLUE}安装WarpKit...${NC}"
+    install_basic
+    install_modules
+    echo -e "${GREEN}${BOLD}🎉 WarpKit安装完成！${NC}"
 }
 
-# 显示帮助
-show_help() {
-    echo "WarpKit 安装脚本"
-    echo ""
-    echo "用法:"
-    echo "  $0                安装WarpKit"
-    echo "  $0 --uninstall    卸载WarpKit"
-    echo "  $0 --help         显示此帮助"
-    echo ""
-    echo "示例:"
-    echo "  curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPO/master/install.sh | bash"
-    echo "  wget -qO- https://raw.githubusercontent.com/$GITHUB_REPO/master/install.sh | bash"
-    echo ""
-}
+uninstall_warpkit() {
+    echo -e "${RED}${BOLD}卸载 WarpKit...${NC}"
 
-# 主安装流程
-main_install() {
-    local steps=(
-        "检查系统要求"
-        "检测发行版"
-        "创建目录"
-        "下载脚本"
-        "安装脚本"
-        "配置PATH"
-        "创建配置"
-        "验证安装"
+    local files_to_remove=(
+        "$BIN_DIR/warpkit"
+        "$LIB_DIR"
+        "$HOME/.local/bin/warpkit"
+        "$HOME/.local/lib/warpkit"
     )
 
-    print_logo
-
-    echo -e "${BOLD}开始安装WarpKit...${NC}"
-    echo ""
-
-    for i in "${!steps[@]}"; do
-        show_progress $((i+1)) ${#steps[@]} "安装进度"
-        sleep 0.5
-
-        case $i in
-            0) check_requirements ;;
-            1) detect_distro ;;
-            2) create_directories ;;
-            3) download_warpkit ;;
-            4) install_script "$TEMP_FILE" ;;
-            5) configure_path ;;
-            6) create_config ;;
-            7) verify_installation ;;
-        esac
+    for file in "${files_to_remove[@]}"; do
+        if [[ -e "$file" ]]; then
+            echo -e "${YELLOW}删除: $file${NC}"
+            rm -rf "$file"
+        fi
     done
 
-    echo ""
-    echo -e "${GREEN}${BOLD}🎉 WarpKit安装完成！${NC}"
-    echo ""
-    echo -e "${CYAN}使用方法:${NC}"
-    echo -e "  ${YELLOW}warpkit${NC}         启动WarpKit"
-    echo -e "  ${YELLOW}warpkit --help${NC}  查看帮助"
-    echo ""
+    echo -e "${CYAN}是否删除配置目录 $CONFIG_DIR? [y/N]${NC}"
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        rm -rf "$CONFIG_DIR"
+        echo -e "${YELLOW}配置目录已删除${NC}"
+    fi
+
+    echo -e "${GREEN}✅ 卸载完成${NC}"
 }
 
-# 主函数
+verify_installation() {
+    echo -e "${BLUE}验证安装...${NC}"
+
+    # 检查主程序
+    local warpkit_path=""
+    if [[ -x "$BIN_DIR/warpkit" ]]; then
+        warpkit_path="$BIN_DIR/warpkit"
+    elif [[ -x "$HOME/.local/bin/warpkit" ]]; then
+        warpkit_path="$HOME/.local/bin/warpkit"
+    fi
+
+    if [[ -n "$warpkit_path" ]]; then
+        echo -e "${GREEN}✅ 主程序: $warpkit_path${NC}"
+
+        # 测试版本
+        local version=$("$warpkit_path" --version 2>/dev/null || echo "unknown")
+        echo -e "${CYAN}   版本: $version${NC}"
+    else
+        echo -e "${RED}❌ 主程序未找到${NC}"
+        return 1
+    fi
+
+    # 检查模块
+    local module_dirs=(
+        "$LIB_DIR/modules"
+        "$HOME/.local/lib/warpkit/modules"
+    )
+
+    local modules_found=false
+    for dir in "${module_dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            local module_count=$(find "$dir" -name "*.sh" | wc -l)
+            if [[ $module_count -gt 0 ]]; then
+                echo -e "${GREEN}✅ 功能目录: $dir ($module_count 个功能)${NC}"
+                modules_found=true
+                break
+            fi
+        fi
+    done
+
+    if [[ "$modules_found" == "false" ]]; then
+        echo -e "${YELLOW}⚠️  基础版本（只包含核心功能）${NC}"
+    fi
+
+    echo ""
+    echo -e "${CYAN}安装验证完成${NC}"
+}
+
+post_install_info() {
+    echo ""
+    echo -e "${CYAN}${BOLD}安装后说明:${NC}"
+    echo ""
+
+    # PATH检查
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        echo -e "${YELLOW}注意: $BIN_DIR 不在 PATH 中${NC}"
+        echo "请将以下行添加到 ~/.bashrc 或 ~/.zshrc:"
+        echo "  export PATH=\"$BIN_DIR:\$PATH\""
+        echo ""
+    fi
+
+    echo -e "${GREEN}使用方法:${NC}"
+    echo "  warpkit          # 启动交互界面"
+    echo "  warpkit --help   # 查看帮助"
+    echo "  warpkit --version # 查看版本"
+    echo ""
+
+    if [[ -d "$LIB_DIR/modules" ]] || [[ -d "$HOME/.local/lib/warpkit/modules" ]]; then
+        echo -e "${GREEN}增强功能:${NC}"
+        echo "  - 系统监控增强功能"
+        echo "  - 智能包管理"
+        echo "  - 网络诊断工具"
+        echo "  - 日志分析工具"
+        echo ""
+    fi
+
+    echo -e "${CYAN}配置目录: $CONFIG_DIR${NC}"
+    echo -e "${CYAN}GitHub: https://github.com/marvinli001/warpkit${NC}"
+}
+
 main() {
+    print_header
+
     case "${1:-}" in
         --uninstall)
-            uninstall
+            uninstall_warpkit
             ;;
         --help|-h)
-            show_help
+            print_usage
             ;;
         "")
-            main_install
+            check_permissions
+            install_full
+            verify_installation
+            post_install_info
             ;;
         *)
-            echo "未知参数: $1"
-            show_help
+            echo -e "${RED}未知选项: $1${NC}"
+            print_usage
             exit 1
             ;;
     esac
 }
 
-# 捕获中断信号
-trap 'echo -e "\n${YELLOW}安装被中断${NC}"; exit 1' INT TERM
+# 检查是否在Linux环境中运行
+if [[ "$OSTYPE" != "linux-gnu"* ]]; then
+    echo -e "${RED}错误: 此安装程序只能在Linux系统中运行${NC}"
+    exit 1
+fi
 
 # 运行主函数
 main "$@"

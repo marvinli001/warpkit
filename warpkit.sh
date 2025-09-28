@@ -29,6 +29,11 @@ declare -g KERNEL=""
 declare -g ARCH=""
 declare -g DEBUG_MODE=false
 
+# 模块化相关变量
+declare -g WARPKIT_MODULES_DIR=""
+declare -g LOADED_MODULES=()
+declare -g AVAILABLE_MODULES=()
+
 # 更新相关变量
 declare -r GITHUB_REPO="marvinli001/warpkit"
 declare -r CONFIG_DIR="$HOME/.config/warpkit"
@@ -180,10 +185,7 @@ check_for_updates() {
     if commit_compare "$current_commit" "$latest_commit"; then
         echo -e "${GREEN}🎉 发现新版本 $latest_commit（当前版本 $current_commit）${NC}" >&2
         echo -e "${CYAN}是否现在更新？ [y/N] ${NC}" >&2
-        # 临时恢复终端模式进行输入
-        restore_terminal_state
         read -r response
-        set_raw_terminal
         if [[ "$response" =~ ^[Yy]$ ]]; then
             perform_update "$latest_commit"
         fi
@@ -209,18 +211,18 @@ perform_update() {
     echo -e "${BLUE}📋 备份当前版本...${NC}"
     cp "$script_path" "$backup_path"
 
-    # 下载新版本
-    echo -e "${BLUE}⬇️ 下载新版本...${NC}"
+    # 下载新版本主脚本
+    echo -e "${BLUE}⬇️ 下载主程序...${NC}"
     local temp_file="/tmp/warpkit_update.sh"
 
     if command -v curl >/dev/null 2>&1; then
         if ! curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPO/master/warpkit.sh" -o "$temp_file"; then
-            echo -e "${RED}❌ 下载失败${NC}"
+            echo -e "${RED}❌ 主程序下载失败${NC}"
             return 1
         fi
     elif command -v wget >/dev/null 2>&1; then
         if ! wget -qO "$temp_file" "https://raw.githubusercontent.com/$GITHUB_REPO/master/warpkit.sh"; then
-            echo -e "${RED}❌ 下载失败${NC}"
+            echo -e "${RED}❌ 主程序下载失败${NC}"
             return 1
         fi
     else
@@ -230,10 +232,13 @@ perform_update() {
 
     # 验证下载的文件
     if [[ ! -s "$temp_file" ]]; then
-        echo -e "${RED}❌ 下载的文件无效${NC}"
+        echo -e "${RED}❌ 下载的主程序文件无效${NC}"
         rm -f "$temp_file"
         return 1
     fi
+
+    # 更新模块（如果存在）
+    update_modules
 
     # 替换当前脚本
     echo -e "${BLUE}🔄 安装新版本...${NC}"
@@ -255,6 +260,71 @@ perform_update() {
         rm -f "$temp_file"
         return 1
     fi
+}
+
+# 更新模块
+update_modules() {
+    # 检测模块安装路径
+    local module_dirs=(
+        "/usr/local/lib/warpkit/modules"
+        "$HOME/.local/lib/warpkit/modules"
+    )
+
+    local modules_dir=""
+    for dir in "${module_dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            modules_dir="$dir"
+            break
+        fi
+    done
+
+    if [[ -z "$modules_dir" ]]; then
+        echo -e "${YELLOW}⚠️ 未找到模块目录，跳过模块更新${NC}"
+        return 0
+    fi
+
+    echo -e "${BLUE}⬇️ 更新模块...${NC}"
+
+    # 创建临时目录
+    local temp_modules_dir="/tmp/warpkit_modules_update"
+    mkdir -p "$temp_modules_dir"
+
+    # 下载模块文件
+    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh")
+    local download_success=true
+
+    for module in "${modules[@]}"; do
+        echo -e "${CYAN}  下载 $module...${NC}"
+        if command -v curl >/dev/null 2>&1; then
+            if ! curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPO/master/modules/$module" -o "$temp_modules_dir/$module"; then
+                echo -e "${YELLOW}  ⚠️ $module 下载失败${NC}"
+                download_success=false
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if ! wget -qO "$temp_modules_dir/$module" "https://raw.githubusercontent.com/$GITHUB_REPO/master/modules/$module"; then
+                echo -e "${YELLOW}  ⚠️ $module 下载失败${NC}"
+                download_success=false
+            fi
+        fi
+    done
+
+    if [[ "$download_success" == "true" ]]; then
+        # 备份现有模块
+        if [[ -d "$modules_dir" ]]; then
+            local modules_backup="${modules_dir}.backup.$(date +%Y%m%d_%H%M%S)"
+            cp -r "$modules_dir" "$modules_backup" 2>/dev/null
+        fi
+
+        # 安装新模块
+        cp "$temp_modules_dir"/*.sh "$modules_dir/" 2>/dev/null
+        chmod +x "$modules_dir"/*.sh 2>/dev/null
+        echo -e "${GREEN}✅ 模块更新完成${NC}"
+    else
+        echo -e "${YELLOW}⚠️ 部分模块更新失败，但主程序更新将继续${NC}"
+    fi
+
+    # 清理临时文件
+    rm -rf "$temp_modules_dir"
 }
 
 # 检测Linux发行版
@@ -470,25 +540,383 @@ multi_step_task() {
     echo -e "${GREEN}${BOLD}所有步骤完成!${NC}"
 }
 
-# 打印菜单项
-print_menu_item() {
-    local index=$1
-    local text=$2
-    local is_selected=$3
-
-    if [[ $is_selected -eq 1 ]]; then
-        echo -e "  ${GREEN}▶ ${BOLD}$text${NC}"
+# 检测UTF-8支持
+detect_utf8_support() {
+    if [[ "${LC_ALL:-${LANG:-}}" =~ [Uu][Tt][Ff]-?8 ]] && [[ -t 1 ]]; then
+        echo "true"
     else
-        echo -e "    $text"
+        echo "false"
     fi
 }
 
-# 显示主菜单
-show_main_menu() {
-    # 关闭errexit避免系统命令失败导致UI退出
+# 获取指针符号
+get_pointer_symbol() {
+    if [[ "$(detect_utf8_support)" == "true" ]]; then
+        echo "▶"
+    else
+        echo ">"
+    fi
+}
+
+# 渲染单个选项
+render_option() {
+    local index=$1
+    local text=$2
+    local is_selected=$3
+    local max_width=${4:-60}
+
+    local pointer=$(get_pointer_symbol)
+    local padding="  "
+
+    if [[ $is_selected -eq 1 ]]; then
+        # 高亮当前选择项
+        printf "${padding}${GREEN}${BOLD}%s %s${NC}\n" "$pointer" "$text"
+    else
+        # 普通选项
+        printf "${padding}  %s\n" "$text"
+    fi
+}
+
+# 清屏并移动光标到顶部
+clear_screen() {
+    if [[ "$IN_ALTERNATE_SCREEN" == "true" ]]; then
+        # 在备用屏缓中，直接清屏
+        printf '\e[2J\e[H'
+    else
+        # 普通模式，清屏
+        clear
+    fi
+}
+
+# 渲染标题
+render_title() {
+    local title="$1"
+    local system_info="$2"
+
+    echo -e "${CYAN}${BOLD}$title${NC}"
+    if [[ -n "$system_info" ]]; then
+        echo -e "${YELLOW}$system_info${NC}"
+    fi
+    echo ""
+}
+
+# 渲染选项列表
+render_options() {
+    local current_index=$1
+    shift
+    local options=("$@")
+
+    for i in "${!options[@]}"; do
+        local is_selected=0
+        if [[ $i -eq $current_index ]]; then
+            is_selected=1
+        fi
+        render_option "$i" "${options[$i]}" "$is_selected"
+    done
+}
+
+# 渲染底部提示
+render_help() {
+    local help_text="${1:-使用 ↑/↓ 或 j/k 选择，回车确认，Esc 或 q 退出}"
+    echo ""
+    echo -e "${YELLOW}$help_text${NC}"
+}
+
+# Codex CLI 风格选择器
+# 参数: 标题 [系统信息] [初始索引] [选项...]
+codex_selector() {
+    local title="$1"
+    local system_info="$2"
+    local initial_index="${3:-0}"
+    shift 3
+    local options=("$@")
+
+    # 验证参数
+    if [[ ${#options[@]} -eq 0 ]]; then
+        echo "SELECTOR_ERROR"
+        return 1
+    fi
+
+    # 验证初始索引
+    if [[ $initial_index -lt 0 || $initial_index -ge ${#options[@]} ]]; then
+        initial_index=0
+    fi
+
+    local current_index=$initial_index
+    local in_selector_mode=true
+
+    # 检查是否是TTY
+    if [[ ! -t 0 || ! -t 1 ]]; then
+        debug_log "非交互式终端，返回默认选择"
+        echo "$initial_index"
+        return 0
+    fi
+
+    # 保存终端状态并设置原始模式
+    save_terminal_state
+    if ! set_raw_terminal; then
+        debug_log "设置原始终端模式失败"
+        echo "SELECTOR_ERROR"
+        return 1
+    fi
+
+    # 进入备用屏缓
+    enter_alternate_screen
+
+    # 设置信号处理
+    trap 'restore_terminal_state; exit 130' INT TERM
+
+    debug_log "codex_selector: 开始选择器，选项数=${#options[@]}, 初始索引=$initial_index"
+
+    # 关闭errexit，避免UI意外退出
     set +e
 
-    MENU_OPTIONS=(
+    # 主循环
+    while [[ "$in_selector_mode" == "true" ]]; do
+        # 渲染界面
+        clear_screen
+        render_title "$title" "$system_info"
+        render_options "$current_index" "${options[@]}"
+        render_help
+
+        # 读取按键
+        local key
+        key=$(read_key)
+        debug_log "codex_selector: 接收到按键: $key"
+
+        case "$key" in
+            "UP")
+                if [[ $current_index -gt 0 ]]; then
+                    ((current_index--))
+                else
+                    # 环绕到最后一个选项
+                    current_index=$((${#options[@]} - 1))
+                fi
+                debug_log "codex_selector: 向上移动到索引 $current_index"
+                ;;
+            "DOWN")
+                if [[ $current_index -lt $((${#options[@]} - 1)) ]]; then
+                    ((current_index++))
+                else
+                    # 环绕到第一个选项
+                    current_index=0
+                fi
+                debug_log "codex_selector: 向下移动到索引 $current_index"
+                ;;
+            "ENTER")
+                debug_log "codex_selector: 确认选择索引 $current_index"
+                in_selector_mode=false
+                ;;
+            "ESCAPE"|"QUIT")
+                debug_log "codex_selector: 用户取消选择"
+                current_index="CANCELLED"
+                in_selector_mode=false
+                ;;
+            "TIMEOUT")
+                # 超时继续循环
+                debug_log "codex_selector: 读取超时，继续等待"
+                ;;
+            "OTHER")
+                # 忽略其他按键
+                debug_log "codex_selector: 忽略未知按键"
+                ;;
+            *)
+                debug_log "codex_selector: 未处理的按键: $key"
+                ;;
+        esac
+    done
+
+    # 恢复errexit
+    set -e
+
+    # 恢复终端状态
+    restore_terminal_state
+
+    # 返回结果
+    echo "$current_index"
+    return 0
+}
+
+# 简化的选择器接口（仅标题和选项）
+simple_selector() {
+    local title="$1"
+    shift
+    local options=("$@")
+
+    codex_selector "$title" "" 0 "${options[@]}"
+}
+
+# ==================== 模块化系统 ====================
+
+# 初始化模块系统
+init_module_system() {
+    local script_dir=$(dirname "$(readlink -f "$0")")
+
+    # 尝试多个可能的模块目录位置
+    local possible_dirs=(
+        "$script_dir/modules"
+        "$HOME/.local/lib/warpkit/modules"
+        "/usr/local/lib/warpkit/modules"
+        "/opt/warpkit/modules"
+    )
+
+    for dir in "${possible_dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            WARPKIT_MODULES_DIR="$dir"
+            debug_log "找到模块目录: $dir"
+            break
+        fi
+    done
+
+    if [[ -z "$WARPKIT_MODULES_DIR" ]]; then
+        debug_log "未找到模块目录，使用内置功能"
+        return 1
+    fi
+
+    # 扫描可用模块
+    scan_available_modules
+    return 0
+}
+
+# 扫描可用模块
+scan_available_modules() {
+    AVAILABLE_MODULES=()
+
+    if [[ ! -d "$WARPKIT_MODULES_DIR" ]]; then
+        return 1
+    fi
+
+    for module_file in "$WARPKIT_MODULES_DIR"/*.sh; do
+        if [[ -f "$module_file" ]]; then
+            local module_name=$(basename "$module_file" .sh)
+            AVAILABLE_MODULES+=("$module_name")
+            debug_log "发现模块: $module_name"
+        fi
+    done
+}
+
+# 加载模块
+load_module() {
+    local module_name="$1"
+    local module_file="$WARPKIT_MODULES_DIR/${module_name}.sh"
+
+    # 检查模块是否已加载
+    for loaded in "${LOADED_MODULES[@]}"; do
+        if [[ "$loaded" == "$module_name" ]]; then
+            debug_log "模块 $module_name 已加载"
+            return 0
+        fi
+    done
+
+    # 检查模块文件是否存在
+    if [[ ! -f "$module_file" ]]; then
+        debug_log "模块文件不存在: $module_file"
+        return 1
+    fi
+
+    # 加载模块
+    debug_log "加载模块: $module_name"
+    if source "$module_file" 2>/dev/null; then
+        LOADED_MODULES+=("$module_name")
+        debug_log "模块 $module_name 加载成功"
+        return 0
+    else
+        debug_log "模块 $module_name 加载失败"
+        return 1
+    fi
+}
+
+# 检查模块是否可用
+is_module_available() {
+    local module_name="$1"
+
+    for available in "${AVAILABLE_MODULES[@]}"; do
+        if [[ "$available" == "$module_name" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# 检查模块是否已加载
+is_module_loaded() {
+    local module_name="$1"
+
+    for loaded in "${LOADED_MODULES[@]}"; do
+        if [[ "$loaded" == "$module_name" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# 调用模块函数（安全调用）
+call_module_function() {
+    local module_name="$1"
+    local function_name="$2"
+    shift 2
+
+    # 尝试加载模块
+    if ! is_module_loaded "$module_name"; then
+        if ! load_module "$module_name"; then
+            debug_log "无法加载模块 $module_name"
+            return 1
+        fi
+    fi
+
+    # 检查函数是否存在
+    if declare -F "$function_name" >/dev/null; then
+        debug_log "调用模块函数: $module_name::$function_name"
+        "$function_name" "$@"
+        return $?
+    else
+        debug_log "函数不存在: $function_name"
+        return 1
+    fi
+}
+
+# 模块化的菜单项处理
+handle_modular_menu_item() {
+    local item="$1"
+
+    case "$item" in
+        "系统监控")
+            if call_module_function "system" "show_system_monitor"; then
+                return 0
+            else
+                show_system_monitor_builtin
+            fi
+            ;;
+        "包管理")
+            if call_module_function "packages" "show_package_management"; then
+                return 0
+            else
+                show_package_management_builtin
+            fi
+            ;;
+        "网络工具")
+            if call_module_function "network" "show_network_tools"; then
+                return 0
+            else
+                show_network_tools_builtin
+            fi
+            ;;
+        "日志查看")
+            if call_module_function "logs" "show_log_viewer"; then
+                return 0
+            else
+                show_log_viewer_builtin
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# 显示主菜单 (新选择器版本)
+show_main_menu() {
+    local main_options=(
         "系统监控"
         "包管理"
         "网络工具"
@@ -497,44 +925,111 @@ show_main_menu() {
         "退出"
     )
 
-    print_logo
-    show_system_info
+    # 构建系统信息字符串
+    local system_info_line="$DISTRO $VERSION | $KERNEL | $ARCH"
 
-    echo -e "${BOLD}${PURPLE}主菜单:${NC}"
-    echo ""
+    # 使用新的选择器
+    local result
+    result=$(codex_selector "WarpKit $(get_current_version) - Linux服务运维工具" "$system_info_line" "$CURRENT_SELECTION" "${main_options[@]}")
 
-    for i in "${!MENU_OPTIONS[@]}"; do
-        if [[ $i -eq $CURRENT_SELECTION ]]; then
-            print_menu_item $i "${MENU_OPTIONS[$i]}" 1
-        else
-            print_menu_item $i "${MENU_OPTIONS[$i]}" 0
-        fi
-    done
+    debug_log "show_main_menu: 选择器返回结果: $result"
 
-    echo ""
-    echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 退出${NC}"
-
-    # 恢复errexit
-    set -e
+    # 处理选择结果
+    case "$result" in
+        "CANCELLED"|"SELECTOR_ERROR")
+            debug_log "show_main_menu: 用户取消或选择器错误"
+            return 1
+            ;;
+        [0-9]*)
+            # 更新当前选择
+            CURRENT_SELECTION=$result
+            # 处理选择的菜单项
+            handle_menu_selection
+            return 0
+            ;;
+        *)
+            debug_log "show_main_menu: 未知选择器结果: $result"
+            return 1
+            ;;
+    esac
 }
 
-# 保存和恢复终端状态
+# 全局终端状态变量
+declare -g TERMINAL_STATE_SAVED=false
+declare -g TERMINAL_STATE_FILE="/tmp/warpkit_terminal_state.$$"
+declare -g IN_ALTERNATE_SCREEN=false
+
+# 保存终端状态
 save_terminal_state() {
-    stty -g > "/tmp/warpkit_terminal_state.$$" 2>/dev/null
+    if [[ "$TERMINAL_STATE_SAVED" == "false" ]]; then
+        if stty -g > "$TERMINAL_STATE_FILE" 2>/dev/null; then
+            TERMINAL_STATE_SAVED=true
+            debug_log "终端状态已保存到 $TERMINAL_STATE_FILE"
+        else
+            debug_log "保存终端状态失败"
+        fi
+    fi
 }
 
+# 恢复终端状态
 restore_terminal_state() {
-    if [[ -f "/tmp/warpkit_terminal_state.$$" ]]; then
-        stty "$(cat "/tmp/warpkit_terminal_state.$$")" 2>/dev/null
-        rm -f "/tmp/warpkit_terminal_state.$$" 2>/dev/null
+    # 退出备用屏缓
+    if [[ "$IN_ALTERNATE_SCREEN" == "true" ]]; then
+        printf '\e[?1049l' 2>/dev/null
+        IN_ALTERNATE_SCREEN=false
+        debug_log "已退出备用屏缓"
+    fi
+
+    # 显示光标
+    printf '\e[?25h' 2>/dev/null
+
+    # 恢复终端设置
+    if [[ "$TERMINAL_STATE_SAVED" == "true" && -f "$TERMINAL_STATE_FILE" ]]; then
+        if stty "$(cat "$TERMINAL_STATE_FILE")" 2>/dev/null; then
+            debug_log "终端状态已恢复"
+        else
+            stty sane 2>/dev/null
+            debug_log "使用sane模式恢复终端"
+        fi
+        rm -f "$TERMINAL_STATE_FILE" 2>/dev/null
+        TERMINAL_STATE_SAVED=false
     else
         stty sane 2>/dev/null
+        debug_log "使用sane模式恢复终端"
     fi
 }
 
 # 设置原始终端模式
 set_raw_terminal() {
-    stty -echo -icanon min 1 time 0 2>/dev/null
+    # 关闭回显、规范模式、信号处理和XON/XOFF
+    # min 1: 至少读取一个字节
+    # time 0: 无超时
+    if stty -echo -icanon -isig -ixon min 1 time 0 2>/dev/null; then
+        debug_log "原始终端模式设置成功"
+    else
+        debug_log "原始终端模式设置失败"
+        return 1
+    fi
+}
+
+# 进入备用屏缓并隐藏光标
+enter_alternate_screen() {
+    if [[ -t 0 && -t 1 ]]; then
+        # 检查终端是否支持备用屏缓
+        if [[ -n "${TERM:-}" ]] && [[ "$TERM" != "dumb" ]]; then
+            printf '\e[?1049h' 2>/dev/null && {
+                IN_ALTERNATE_SCREEN=true
+                debug_log "已进入备用屏缓"
+            } || {
+                debug_log "备用屏缓不支持，使用普通清屏"
+                clear
+            }
+        else
+            clear
+        fi
+        # 隐藏光标
+        printf '\e[?25l' 2>/dev/null
+    fi
 }
 
 # 调试输出
@@ -550,233 +1045,247 @@ flush_input() {
     while IFS= read -r -n1 -t 0.001 dummy 2>/dev/null; do
         debug_log "flush_input: 清除残留字节: $(printf '%q' "$dummy")"
     done
-    true  # 确保函数返回 0
+    true
 }
 
-# 读取单个按键 - 两段式读取，确保幂等与零退出
-read_key() {
-    local first_byte=""
-    local second_byte=""
-    local third_byte=""
-    local in_esc_sequence=false
-
-    debug_log "read_key: 开始两段式读取"
-
-    # 第一段：读取第一个字节
-    if IFS= read -r -n1 -t 1 first_byte 2>/dev/null; then
-        debug_log "read_key: 第一字节: $(printf '%q' "$first_byte")"
-
-        # 检查是否是ESC，进入方向键状态机
-        if [[ "$first_byte" == $'\e' ]]; then
-            in_esc_sequence=true
-            debug_log "read_key: 进入ESC序列状态"
-
-            # 第二段：用短超时读取最多2个字节
-            if IFS= read -r -n1 -t 0.1 second_byte 2>/dev/null; then
-                debug_log "read_key: 第二字节: $(printf '%q' "$second_byte")"
-
-                if [[ "$second_byte" == "[" ]]; then
-                    # 继续读取第三字节
-                    if IFS= read -r -n1 -t 0.1 third_byte 2>/dev/null; then
-                        debug_log "read_key: 第三字节: $(printf '%q' "$third_byte")"
-
-                        # 组装完整序列并检查
-                        case "$third_byte" in
-                            'A')
-                                debug_log "read_key: 完整上方向键序列"
-                                echo "UP"
-                                return 0
-                                ;;
-                            'B')
-                                debug_log "read_key: 完整下方向键序列"
-                                echo "DOWN"
-                                return 0
-                                ;;
-                            'C')
-                                debug_log "read_key: 完整右方向键序列"
-                                echo "RIGHT"
-                                return 0
-                                ;;
-                            'D')
-                                debug_log "read_key: 完整左方向键序列"
-                                echo "LEFT"
-                                return 0
-                                ;;
-                            *)
-                                debug_log "read_key: ESC[后跟无效字符，丢弃"
-                                echo "OTHER"
-                                return 0
-                                ;;
-                        esac
-                    else
-                        debug_log "read_key: ESC[后未读到第三字节，不完整序列"
-                        echo "OTHER"
-                        return 0
-                    fi
-                else
-                    debug_log "read_key: ESC后非[字符，不完整序列"
-                    echo "OTHER"
-                    return 0
-                fi
-            else
-                debug_log "read_key: 单独ESC，丢弃"
-                echo "OTHER"
-                return 0
-            fi
-        else
-            # 处理非ESC的第一字节
-            case "$first_byte" in
-                '')
-                    debug_log "read_key: 空读/超时，忽略"
-                    echo "OTHER"
-                    return 0
-                    ;;
-                $'\n')
-                    debug_log "read_key: 换行符回车"
-                    echo "ENTER"
-                    return 0
-                    ;;
-                $'\r')
-                    debug_log "read_key: 回车符"
-                    echo "ENTER"
-                    return 0
-                    ;;
-                'q'|'Q')
-                    # 只有在非ESC状态下q/Q才是退出
-                    debug_log "read_key: 退出键"
-                    echo "QUIT"
-                    return 0
-                    ;;
-                *)
-                    debug_log "read_key: 其他字符: $(printf '%q' "$first_byte")"
-                    echo "OTHER"
-                    return 0
-                    ;;
-            esac
-        fi
+# 读取单个字符（原始字节）
+read_raw_char() {
+    local char=""
+    if IFS= read -r -n1 -t 10 char 2>/dev/null; then
+        printf '%s' "$char"
+        return 0
     else
-        debug_log "read_key: 读取超时"
-        echo "OTHER"
+        return 1
+    fi
+}
+
+# 解析按键序列
+parse_key_sequence() {
+    local first_char="$1"
+    local timeout=${2:-0.1}
+
+    # 如果不是ESC，直接返回
+    if [[ "$first_char" != $'\e' ]]; then
+        echo "$first_char"
         return 0
     fi
 
-    # 兜底确保返回0
-    echo "OTHER"
-    return 0
-}
+    # ESC序列处理
+    local second_char=""
+    if IFS= read -r -n1 -t "$timeout" second_char 2>/dev/null; then
+        debug_log "parse_key_sequence: ESC + $(printf '%q' "$second_char")"
 
-# 处理菜单导航
-handle_navigation() {
-    # 关闭errexit避免UI循环被意外退出
-    set +e
-
-    while true; do
-        show_main_menu
-
-        flush_input
-        local key=$(read_key)
-
-        case "$key" in
-            "UP")
-                if [[ $CURRENT_SELECTION -gt 0 ]]; then
-                    ((CURRENT_SELECTION--))
+        case "$second_char" in
+            '[')
+                # 标准ANSI序列 ESC[
+                local third_char=""
+                if IFS= read -r -n1 -t "$timeout" third_char 2>/dev/null; then
+                    case "$third_char" in
+                        'A') echo "UP"; return 0 ;;
+                        'B') echo "DOWN"; return 0 ;;
+                        'C') echo "RIGHT"; return 0 ;;
+                        'D') echo "LEFT"; return 0 ;;
+                        '1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9')
+                            # 扩展序列，继续读取直到找到结束字符
+                            local extended_seq="$third_char"
+                            local char=""
+                            while IFS= read -r -n1 -t 0.05 char 2>/dev/null; do
+                                extended_seq+="$char"
+                                case "$char" in
+                                    'A'|'B'|'C'|'D'|'~'|'H'|'F')
+                                        # 找到结束字符
+                                        case "$char" in
+                                            'A') echo "UP"; return 0 ;;
+                                            'B') echo "DOWN"; return 0 ;;
+                                            'C') echo "RIGHT"; return 0 ;;
+                                            'D') echo "LEFT"; return 0 ;;
+                                            *) echo "ESCAPE"; return 0 ;;
+                                        esac
+                                        ;;
+                                esac
+                                # 防止无限循环
+                                if [[ ${#extended_seq} -gt 10 ]]; then
+                                    break
+                                fi
+                            done
+                            echo "ESCAPE"
+                            return 0
+                            ;;
+                        *) echo "ESCAPE"; return 0 ;;
+                    esac
                 else
-                    CURRENT_SELECTION=$((${#MENU_OPTIONS[@]} - 1))
+                    echo "ESCAPE"
+                    return 0
                 fi
                 ;;
-            "DOWN")
-                if [[ $CURRENT_SELECTION -lt $((${#MENU_OPTIONS[@]} - 1)) ]]; then
-                    ((CURRENT_SELECTION++))
+            'O')
+                # 应用程序键模式 ESCO
+                local third_char=""
+                if IFS= read -r -n1 -t "$timeout" third_char 2>/dev/null; then
+                    case "$third_char" in
+                        'A') echo "UP"; return 0 ;;
+                        'B') echo "DOWN"; return 0 ;;
+                        'C') echo "RIGHT"; return 0 ;;
+                        'D') echo "LEFT"; return 0 ;;
+                        *) echo "ESCAPE"; return 0 ;;
+                    esac
                 else
-                    CURRENT_SELECTION=0
+                    echo "ESCAPE"
+                    return 0
                 fi
-                ;;
-            "ENTER")
-                handle_menu_selection
-                ;;
-            "QUIT")
-                echo -e "\n${YELLOW}再见！${NC}"
-                restore_terminal_state
-                set -e
-                exit 0
-                ;;
-            "OTHER")
-                # 忽略其他按键，继续循环
                 ;;
             *)
-                # 对于未识别的按键，也忽略
+                # 其他ESC序列，当做ESC处理
+                echo "ESCAPE"
+                return 0
                 ;;
         esac
+    else
+        # 单独的ESC
+        echo "ESCAPE"
+        return 0
+    fi
+}
+
+# 读取按键并解析
+read_key() {
+    # 清除输入缓冲
+    flush_input
+
+    # 读取第一个字符
+    local first_char=""
+    if ! first_char=$(read_raw_char); then
+        debug_log "read_key: 读取超时或失败"
+        echo "TIMEOUT"
+        return 0
+    fi
+
+    debug_log "read_key: 第一字符: $(printf '%q' "$first_char")"
+
+    # 处理特殊字符
+    case "$first_char" in
+        '')
+            debug_log "read_key: 空字符，忽略"
+            echo "OTHER"
+            return 0
+            ;;
+        $'\n'|$'\r')
+            debug_log "read_key: 回车/换行"
+            echo "ENTER"
+            return 0
+            ;;
+        $'\e')
+            # ESC序列处理
+            local parsed_key
+            parsed_key=$(parse_key_sequence "$first_char")
+            debug_log "read_key: ESC序列解析结果: $parsed_key"
+            echo "$parsed_key"
+            return 0
+            ;;
+        'q'|'Q')
+            debug_log "read_key: 退出键"
+            echo "QUIT"
+            return 0
+            ;;
+        'j')
+            debug_log "read_key: vim风格下移"
+            echo "DOWN"
+            return 0
+            ;;
+        'k')
+            debug_log "read_key: vim风格上移"
+            echo "UP"
+            return 0
+            ;;
+        ' ')
+            debug_log "read_key: 空格键"
+            echo "ENTER"
+            return 0
+            ;;
+        $'\x03')
+            debug_log "read_key: Ctrl+C"
+            echo "QUIT"
+            return 0
+            ;;
+        *)
+            debug_log "read_key: 其他字符: $(printf '%q' "$first_char")"
+            echo "OTHER"
+            return 0
+            ;;
+    esac
+}
+
+# 处理菜单导航 (新选择器版本)
+handle_navigation() {
+    # 主菜单循环
+    while true; do
+        if ! show_main_menu; then
+            # 用户取消或出错，退出
+            echo -e "\n${YELLOW}再见！${NC}"
+            exit 0
+        fi
+
+        # show_main_menu 已经处理了选择和菜单切换
+        # 如果到这里，说明从子菜单返回了，继续显示主菜单
     done
 }
 
 # 处理菜单选择
 handle_menu_selection() {
-    local selected_option="${MENU_OPTIONS[$CURRENT_SELECTION]}"
+    local main_options=(
+        "系统监控"
+        "包管理"
+        "网络工具"
+        "日志查看"
+        "脚本管理"
+        "退出"
+    )
+
+    local selected_option="${main_options[$CURRENT_SELECTION]}"
 
     case "$selected_option" in
-        "系统监控")
-            show_system_monitor
-            ;;
-        "包管理")
-            show_package_management
-            ;;
-        "网络工具")
-            show_network_tools
-            ;;
-        "日志查看")
-            show_log_viewer
-            ;;
         "脚本管理")
+            # 脚本管理始终使用内置功能
             show_script_management
             ;;
         "退出")
             echo -e "\n${YELLOW}再见！${NC}"
             exit 0
             ;;
+        *)
+            # 尝试使用模块化处理，失败则使用内置功能
+            if ! handle_modular_menu_item "$selected_option"; then
+                case "$selected_option" in
+                    "系统监控")
+                        show_system_monitor_builtin
+                        ;;
+                    "包管理")
+                        show_package_management_builtin
+                        ;;
+                    "网络工具")
+                        show_network_tools_builtin
+                        ;;
+                    "日志查看")
+                        show_log_viewer_builtin
+                        ;;
+                esac
+            fi
+            ;;
     esac
 }
 
-# 系统监控演示
-show_system_monitor() {
-    # 关闭errexit避免系统命令失败导致退出
-    set +e
-
+# 系统监控演示（内置版本）
+show_system_monitor_builtin() {
     clear
     echo -e "${BLUE}${BOLD}系统监控${NC}"
     echo ""
-
-    loading_animation "正在收集系统信息" 2
-
-    update_status "info" "显示系统状态"
-
-    # 检查uptime命令
-    if command -v uptime >/dev/null 2>&1; then
-        show_command_output "uptime" "获取系统运行时间" || true
-    else
-        echo -e "${YELLOW}⚠️  uptime命令不可用${NC}"
-    fi
-
-    # 检查free命令
-    if command -v free >/dev/null 2>&1; then
-        show_command_output "free -h" "检查内存使用情况" || true
-    else
-        echo -e "${YELLOW}⚠️  free命令不可用${NC}"
-    fi
-
-    # 检查df命令
-    if command -v df >/dev/null 2>&1; then
-        show_command_output "df -h" "检查磁盘使用情况" || true
-    else
-        echo -e "${YELLOW}⚠️  df命令不可用${NC}"
-    fi
-
+    echo -e "${CYAN}系统信息:${NC}"
+    uptime 2>/dev/null || echo "系统运行时间: 不可用"
+    free -h 2>/dev/null || echo "内存信息: 不可用"
+    df -h 2>/dev/null | head -5 || echo "磁盘信息: 不可用"
     echo ""
     echo "按任意键返回主菜单"
     read -n1
-
-    # 恢复errexit
-    set -e
 }
 
 # 检测包管理器
@@ -805,1272 +1314,50 @@ detect_package_manager() {
     echo "$pkg_manager"
 }
 
-# 包管理菜单
-show_package_management() {
-    local pkg_selection=0
+# 包管理菜单（内置版本）
+show_package_management_builtin() {
+    clear
+    echo -e "${BLUE}${BOLD}包管理${NC}"
+    echo ""
     local pkg_manager=$(detect_package_manager)
-    local pkg_options=(
-        "更新软件包列表"
-        "检查可更新的包"
-        "安装常用软件"
-        "搜索软件包"
-        "清理包缓存"
-        "查看已安装包"
-        "返回主菜单"
-    )
-
-    while true; do
-        clear
-        print_logo
-
-        echo -e "${BLUE}${BOLD}包管理${NC}"
-        echo ""
-        echo -e "${CYAN}检测到的包管理器: ${GREEN}$pkg_manager${NC}"
-        echo ""
-
-        if [[ "$pkg_manager" == "unknown" ]]; then
-            echo -e "${RED}❌ 未检测到支持的包管理器${NC}"
-            echo ""
-            echo "按任意键返回主菜单"
-            read -n1
-            return
-        fi
-
-        for i in "${!pkg_options[@]}"; do
-            if [[ $i -eq $pkg_selection ]]; then
-                echo -e "  ${GREEN}▶ ${pkg_options[$i]}${NC}"
-            else
-                echo -e "    ${pkg_options[$i]}"
-            fi
-        done
-
-        echo ""
-        echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回主菜单${NC}"
-
-        flush_input
-        local key=$(read_key)
-        case "$key" in
-            "UP")
-                if [[ $pkg_selection -gt 0 ]]; then
-                    ((pkg_selection--))
-                else
-                    pkg_selection=$((${#pkg_options[@]} - 1))
-                fi
-                ;;
-            "DOWN")
-                if [[ $pkg_selection -lt $((${#pkg_options[@]} - 1)) ]]; then
-                    ((pkg_selection++))
-                else
-                    pkg_selection=0
-                fi
-                ;;
-            "ENTER")
-                case $pkg_selection in
-                    0) update_package_list "$pkg_manager" ;;
-                    1) check_updates "$pkg_manager" ;;
-                    2) install_common_packages "$pkg_manager" ;;
-                    3) search_packages "$pkg_manager" ;;
-                    4) clean_package_cache "$pkg_manager" ;;
-                    5) list_installed_packages "$pkg_manager" ;;
-                    6) return ;;
-                esac
-                ;;
-            "QUIT")
-                return
-                ;;
-            "OTHER")
-                # 忽略其他按键，继续循环
-                ;;
-            *)
-                # 对于未识别的按键，也忽略
-                ;;
-        esac
-    done
-}
-
-# 更新软件包列表
-update_package_list() {
-    local pkg_manager="$1"
-    clear
-    echo -e "${BLUE}${BOLD}更新软件包列表${NC}"
-    echo ""
-
-    case "$pkg_manager" in
-        "apt")
-            echo -e "${YELLOW}正在更新APT软件包列表...${NC}"
-            apt update 2>&1 | while IFS= read -r line; do
-                echo "  $line"
-            done
-            ;;
-        "yum")
-            echo -e "${YELLOW}正在更新YUM软件包列表...${NC}"
-            yum check-update >/dev/null 2>&1
-            echo -e "${GREEN}✅ YUM软件包列表更新完成${NC}"
-            ;;
-        "dnf")
-            echo -e "${YELLOW}正在更新DNF软件包列表...${NC}"
-            dnf check-update >/dev/null 2>&1
-            echo -e "${GREEN}✅ DNF软件包列表更新完成${NC}"
-            ;;
-        "pacman")
-            echo -e "${YELLOW}正在更新Pacman软件包列表...${NC}"
-            pacman -Sy --noconfirm
-            ;;
-        "zypper")
-            echo -e "${YELLOW}正在更新Zypper软件包列表...${NC}"
-            zypper refresh
-            ;;
-        "apk")
-            echo -e "${YELLOW}正在更新APK软件包列表...${NC}"
-            apk update
-            ;;
-    esac
-
-    echo ""
-    echo "按任意键返回包管理菜单"
-    read -n1
-}
-
-# 检查可更新的包
-check_updates() {
-    local pkg_manager="$1"
-    clear
-    echo -e "${BLUE}${BOLD}检查可更新的包${NC}"
-    echo ""
-
-    case "$pkg_manager" in
-        "apt")
-            echo -e "${YELLOW}检查APT可更新的包...${NC}"
-            apt list --upgradable 2>/dev/null | head -20
-            ;;
-        "yum")
-            echo -e "${YELLOW}检查YUM可更新的包...${NC}"
-            yum check-update 2>/dev/null | head -20
-            ;;
-        "dnf")
-            echo -e "${YELLOW}检查DNF可更新的包...${NC}"
-            dnf check-update 2>/dev/null | head -20
-            ;;
-        "pacman")
-            echo -e "${YELLOW}检查Pacman可更新的包...${NC}"
-            pacman -Qu | head -20
-            ;;
-        "zypper")
-            echo -e "${YELLOW}检查Zypper可更新的包...${NC}"
-            zypper list-updates | head -20
-            ;;
-        "apk")
-            echo -e "${YELLOW}检查APK可更新的包...${NC}"
-            apk version -l '<' | head -20
-            ;;
-    esac
-
-    echo ""
-    echo "按任意键返回包管理菜单"
-    read -n1
-}
-
-# 安装常用软件
-install_common_packages() {
-    local pkg_manager="$1"
-    clear
-    echo -e "${BLUE}${BOLD}安装常用软件${NC}"
-    echo ""
-
-    local common_tools=("curl" "wget" "vim" "git" "htop" "tree" "unzip")
-
-    echo -e "${YELLOW}常用软件包:${NC}"
-    for tool in "${common_tools[@]}"; do
-        echo "  • $tool"
-    done
-
-    echo ""
-    echo -e "${CYAN}是否安装这些常用软件包？ [y/N]${NC}"
-    # 临时恢复终端模式进行输入
-    stty echo icanon 2>/dev/null
-    read -r response
-    stty -echo -icanon 2>/dev/null
-
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-        echo ""
-        echo -e "${YELLOW}正在安装常用软件...${NC}"
-
-        case "$pkg_manager" in
-            "apt")
-                apt install -y "${common_tools[@]}"
-                ;;
-            "yum")
-                yum install -y "${common_tools[@]}"
-                ;;
-            "dnf")
-                dnf install -y "${common_tools[@]}"
-                ;;
-            "pacman")
-                pacman -S --noconfirm "${common_tools[@]}"
-                ;;
-            "zypper")
-                zypper install -y "${common_tools[@]}"
-                ;;
-            "apk")
-                apk add "${common_tools[@]}"
-                ;;
-        esac
-
-        echo -e "${GREEN}✅ 常用软件安装完成${NC}"
-    else
-        echo -e "${YELLOW}取消安装操作${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回包管理菜单"
-    read -n1
-}
-
-# 搜索软件包
-search_packages() {
-    local pkg_manager="$1"
-    clear
-    echo -e "${BLUE}${BOLD}搜索软件包${NC}"
-    echo ""
-
-    echo -e "${CYAN}请输入要搜索的软件包名称:${NC}"
-    # 临时恢复终端模式进行输入
-    restore_terminal_state
-    read -r search_term
-    set_raw_terminal
-
-    if [[ -n "$search_term" ]]; then
-        echo ""
-        echo -e "${YELLOW}搜索结果 '$search_term':${NC}"
-        echo ""
-
-        case "$pkg_manager" in
-            "apt")
-                apt search "$search_term" 2>/dev/null | head -20
-                ;;
-            "yum")
-                yum search "$search_term" 2>/dev/null | head -20
-                ;;
-            "dnf")
-                dnf search "$search_term" 2>/dev/null | head -20
-                ;;
-            "pacman")
-                pacman -Ss "$search_term" | head -20
-                ;;
-            "zypper")
-                zypper search "$search_term" | head -20
-                ;;
-            "apk")
-                apk search "$search_term" | head -20
-                ;;
-        esac
-    fi
-
-    echo ""
-    echo "按任意键返回包管理菜单"
-    read -n1
-}
-
-# 清理包缓存
-clean_package_cache() {
-    local pkg_manager="$1"
-    clear
-    echo -e "${BLUE}${BOLD}清理包缓存${NC}"
-    echo ""
-
-    echo -e "${YELLOW}这将清理软件包管理器的缓存文件${NC}"
-    echo -e "${CYAN}是否继续？ [y/N]${NC}"
-    # 临时恢复终端模式进行输入
-    stty echo icanon 2>/dev/null
-    read -r response
-    stty -echo -icanon 2>/dev/null
-
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-        echo ""
-        echo -e "${YELLOW}正在清理缓存...${NC}"
-
-        case "$pkg_manager" in
-            "apt")
-                apt autoclean && apt autoremove -y
-                echo -e "${GREEN}✅ APT缓存清理完成${NC}"
-                ;;
-            "yum")
-                yum clean all
-                echo -e "${GREEN}✅ YUM缓存清理完成${NC}"
-                ;;
-            "dnf")
-                dnf clean all
-                echo -e "${GREEN}✅ DNF缓存清理完成${NC}"
-                ;;
-            "pacman")
-                pacman -Sc --noconfirm
-                echo -e "${GREEN}✅ Pacman缓存清理完成${NC}"
-                ;;
-            "zypper")
-                zypper clean -a
-                echo -e "${GREEN}✅ Zypper缓存清理完成${NC}"
-                ;;
-            "apk")
-                rm -rf /var/cache/apk/*
-                echo -e "${GREEN}✅ APK缓存清理完成${NC}"
-                ;;
-        esac
-    else
-        echo -e "${YELLOW}取消清理操作${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回包管理菜单"
-    read -n1
-}
-
-# 查看已安装包
-list_installed_packages() {
-    local pkg_manager="$1"
-    clear
-    echo -e "${BLUE}${BOLD}已安装的软件包${NC}"
-    echo ""
-
-    echo -e "${YELLOW}显示前20个已安装的软件包:${NC}"
-    echo ""
-
-    case "$pkg_manager" in
-        "apt")
-            dpkg -l | head -20
-            ;;
-        "yum")
-            yum list installed | head -20
-            ;;
-        "dnf")
-            dnf list installed | head -20
-            ;;
-        "pacman")
-            pacman -Q | head -20
-            ;;
-        "zypper")
-            zypper search --installed-only | head -20
-            ;;
-        "apk")
-            apk info | head -20
-            ;;
-    esac
-
-    echo ""
-    echo "按任意键返回包管理菜单"
-    read -n1
-}
-
-
-# 网络工具菜单
-show_network_tools() {
-    local network_selection=0
-    local network_options=(
-        "DNS服务器修复"
-        "BBR加速配置"
-        "网络连接测试"
-        "网络配置查看"
-        "端口扫描工具"
-        "返回主菜单"
-    )
-
-    while true; do
-        clear
-        print_logo
-
-        echo -e "${BLUE}${BOLD}网络工具${NC}"
-        echo ""
-
-        for i in "${!network_options[@]}"; do
-            if [[ $i -eq $network_selection ]]; then
-                echo -e "  ${GREEN}▶ ${network_options[$i]}${NC}"
-            else
-                echo -e "    ${network_options[$i]}"
-            fi
-        done
-
-        echo ""
-        echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回主菜单${NC}"
-
-        flush_input
-        local key=$(read_key)
-        case "$key" in
-            "UP")
-                if [[ $network_selection -gt 0 ]]; then
-                    ((network_selection--))
-                else
-                    network_selection=$((${#network_options[@]} - 1))
-                fi
-                ;;
-            "DOWN")
-                if [[ $network_selection -lt $((${#network_options[@]} - 1)) ]]; then
-                    ((network_selection++))
-                else
-                    network_selection=0
-                fi
-                ;;
-            "ENTER")
-                case $network_selection in
-                    0) show_dns_repair_menu ;;
-                    1) show_bbr_config ;;
-                    2) test_network_connection ;;
-                    3) show_network_config ;;
-                    4) show_port_scanner ;;
-                    5) return ;;
-                esac
-                ;;
-            "QUIT")
-                return
-                ;;
-            "OTHER")
-                # 忽略其他按键，继续循环
-                ;;
-            *)
-                # 对于未识别的按键，也忽略
-                ;;
-        esac
-    done
-}
-
-# BBR加速配置菜单
-show_bbr_config() {
-    local bbr_selection=0
-    local bbr_options=(
-        "检查BBR状态"
-        "启用BBR加速"
-        "禁用BBR加速"
-        "返回网络工具菜单"
-    )
-
-    while true; do
-        clear
-        print_logo
-
-        echo -e "${BLUE}${BOLD}BBR加速配置${NC}"
-        echo ""
-
-        for i in "${!bbr_options[@]}"; do
-            if [[ $i -eq $bbr_selection ]]; then
-                echo -e "  ${GREEN}▶ ${bbr_options[$i]}${NC}"
-            else
-                echo -e "    ${bbr_options[$i]}"
-            fi
-        done
-
-        echo ""
-        echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回${NC}"
-
-        flush_input
-        local key=$(read_key)
-        case "$key" in
-            "UP")
-                if [[ $bbr_selection -gt 0 ]]; then
-                    ((bbr_selection--))
-                else
-                    bbr_selection=$((${#bbr_options[@]} - 1))
-                fi
-                ;;
-            "DOWN")
-                if [[ $bbr_selection -lt $((${#bbr_options[@]} - 1)) ]]; then
-                    ((bbr_selection++))
-                else
-                    bbr_selection=0
-                fi
-                ;;
-            "ENTER")
-                case $bbr_selection in
-                    0) check_bbr_status ;;
-                    1) enable_bbr ;;
-                    2) disable_bbr ;;
-                    3) return ;;
-                esac
-                ;;
-            "QUIT")
-                return
-                ;;
-            "OTHER")
-                # 忽略其他按键，继续循环
-                ;;
-            *)
-                # 对于未识别的按键，也忽略
-                ;;
-        esac
-    done
-}
-
-# 检查BBR状态
-check_bbr_status() {
-    clear
-    echo -e "${BLUE}${BOLD}BBR状态检查${NC}"
-    echo ""
-
-    # 检查内核版本
-    local kernel_version=$(uname -r)
-    echo -e "${CYAN}当前内核版本: ${GREEN}$kernel_version${NC}"
-
-    # 检查BBR是否可用
-    if [[ -f /proc/sys/net/ipv4/tcp_available_congestion_control ]]; then
-        local available_cc=$(cat /proc/sys/net/ipv4/tcp_available_congestion_control)
-        echo -e "${CYAN}可用拥塞控制算法: ${YELLOW}$available_cc${NC}"
-
-        if echo "$available_cc" | grep -q "bbr"; then
-            echo -e "${GREEN}✅ BBR算法可用${NC}"
-        else
-            echo -e "${RED}❌ BBR算法不可用${NC}"
-        fi
-    fi
-
-    # 检查当前使用的拥塞控制算法
-    if [[ -f /proc/sys/net/ipv4/tcp_congestion_control ]]; then
-        local current_cc=$(cat /proc/sys/net/ipv4/tcp_congestion_control)
-        echo -e "${CYAN}当前拥塞控制算法: ${GREEN}$current_cc${NC}"
-
-        if [[ "$current_cc" == "bbr" ]]; then
-            echo -e "${GREEN}✅ BBR已启用${NC}"
-        else
-            echo -e "${YELLOW}⚠️  BBR未启用${NC}"
-        fi
-    fi
-
-    # 检查内核模块
-    echo ""
-    echo -e "${CYAN}BBR模块状态:${NC}"
-    if lsmod | grep -q "tcp_bbr"; then
-        echo -e "${GREEN}✅ tcp_bbr模块已加载${NC}"
-    else
-        echo -e "${YELLOW}⚠️  tcp_bbr模块未加载${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回BBR配置菜单"
-    read -n1
-}
-
-# 启用BBR
-enable_bbr() {
-    clear
-    echo -e "${BLUE}${BOLD}启用BBR加速${NC}"
-    echo ""
-
-    # 检查内核版本支持
-    local kernel_version=$(uname -r)
-    local major_version=$(echo "$kernel_version" | cut -d'.' -f1)
-    local minor_version=$(echo "$kernel_version" | cut -d'.' -f2)
-
-    echo -e "${CYAN}检查内核版本支持...${NC}"
-    echo -e "${YELLOW}当前内核: $kernel_version${NC}"
-
-    # BBR需要内核4.9+
-    if [[ $major_version -lt 4 ]] || [[ $major_version -eq 4 && $minor_version -lt 9 ]]; then
-        echo -e "${RED}❌ BBR需要内核版本4.9或更高${NC}"
-        echo -e "${YELLOW}当前内核版本过低，需要升级内核${NC}"
-        echo ""
-        echo -e "${CYAN}是否尝试安装新内核？ [y/N]${NC}"
-        # 临时恢复终端模式进行输入
-        stty echo icanon 2>/dev/null
-        read -r install_kernel
-        stty -echo -icanon 2>/dev/null
-
-        if [[ "$install_kernel" =~ ^[Yy]$ ]]; then
-            install_kernel_for_bbr
-        else
-            echo -e "${YELLOW}取消BBR启用${NC}"
-        fi
-        echo ""
-        echo "按任意键返回BBR配置菜单"
-        read -n1
-        return
-    fi
-
-    echo -e "${GREEN}✅ 内核版本支持BBR${NC}"
-    echo ""
-
-    # 检查BBR是否已经启用
-    if [[ -f /proc/sys/net/ipv4/tcp_congestion_control ]]; then
-        local current_cc=$(cat /proc/sys/net/ipv4/tcp_congestion_control)
-        if [[ "$current_cc" == "bbr" ]]; then
-            echo -e "${GREEN}✅ BBR已经启用${NC}"
-            echo ""
-            echo "按任意键返回BBR配置菜单"
-            read -n1
-            return
-        fi
-    fi
-
-    echo -e "${YELLOW}正在启用BBR...${NC}"
-
-    # 加载BBR模块
-    echo -e "${CYAN}加载tcp_bbr模块...${NC}"
-    if modprobe tcp_bbr 2>/dev/null; then
-        echo -e "${GREEN}✅ tcp_bbr模块加载成功${NC}"
-    else
-        echo -e "${YELLOW}⚠️  模块加载失败，继续尝试配置${NC}"
-    fi
-
-    # 配置内核参数
-    echo -e "${CYAN}配置内核参数...${NC}"
-
-    # 备份原始配置
-    if [[ ! -f /etc/sysctl.conf.backup.warpkit ]]; then
-        cp /etc/sysctl.conf /etc/sysctl.conf.backup.warpkit 2>/dev/null || true
-    fi
-
-    # 添加BBR配置到sysctl.conf
-    {
-        echo ""
-        echo "# WarpKit BBR Configuration"
-        echo "net.core.default_qdisc=fq"
-        echo "net.ipv4.tcp_congestion_control=bbr"
-    } >> /etc/sysctl.conf
-
-    # 应用配置
-    echo -e "${CYAN}应用配置...${NC}"
-    sysctl -p >/dev/null 2>&1
-
-    # 立即启用BBR
-    echo "fq" > /proc/sys/net/core/default_qdisc 2>/dev/null || true
-    echo "bbr" > /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || true
-
-    # 验证配置
-    echo ""
-    echo -e "${CYAN}验证BBR状态...${NC}"
-
-    local current_cc=$(cat /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || echo "unknown")
-    local current_qdisc=$(cat /proc/sys/net/core/default_qdisc 2>/dev/null || echo "unknown")
-
-    if [[ "$current_cc" == "bbr" ]]; then
-        echo -e "${GREEN}✅ BBR启用成功${NC}"
-        echo -e "${GREEN}   拥塞控制: $current_cc${NC}"
-        echo -e "${GREEN}   队列调度: $current_qdisc${NC}"
-        echo ""
-        echo -e "${YELLOW}注意: 配置已写入/etc/sysctl.conf，重启后自动生效${NC}"
-    else
-        echo -e "${RED}❌ BBR启用失败${NC}"
-        echo -e "${YELLOW}当前拥塞控制: $current_cc${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回BBR配置菜单"
-    read -n1
-}
-
-# 禁用BBR
-disable_bbr() {
-    clear
-    echo -e "${BLUE}${BOLD}禁用BBR加速${NC}"
-    echo ""
-
-    # 检查BBR是否已启用
-    local current_cc=$(cat /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || echo "unknown")
-
-    if [[ "$current_cc" != "bbr" ]]; then
-        echo -e "${YELLOW}⚠️  BBR当前未启用${NC}"
-        echo -e "${CYAN}当前拥塞控制算法: $current_cc${NC}"
-        echo ""
-        echo "按任意键返回BBR配置菜单"
-        read -n1
-        return
-    fi
-
-    echo -e "${YELLOW}当前BBR已启用，确定要禁用吗？ [y/N]${NC}"
-    # 临时恢复终端模式进行输入
-    stty echo icanon 2>/dev/null
-    read -r confirm
-    stty -echo -icanon 2>/dev/null
-
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}取消禁用操作${NC}"
-        echo ""
-        echo "按任意键返回BBR配置菜单"
-        read -n1
-        return
-    fi
-
-    echo ""
-    echo -e "${YELLOW}正在禁用BBR...${NC}"
-
-    # 恢复到cubic算法
-    echo -e "${CYAN}切换到cubic算法...${NC}"
-    echo "cubic" > /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || true
-    echo "pfifo_fast" > /proc/sys/net/core/default_qdisc 2>/dev/null || true
-
-    # 从sysctl.conf中移除BBR配置
-    if [[ -f /etc/sysctl.conf ]]; then
-        echo -e "${CYAN}移除sysctl.conf中的BBR配置...${NC}"
-        sed -i '/# WarpKit BBR Configuration/,+2d' /etc/sysctl.conf 2>/dev/null || true
-        sysctl -p >/dev/null 2>&1
-    fi
-
-    # 验证
-    local new_cc=$(cat /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || echo "unknown")
-    echo ""
-    echo -e "${CYAN}当前拥塞控制算法: ${GREEN}$new_cc${NC}"
-
-    if [[ "$new_cc" != "bbr" ]]; then
-        echo -e "${GREEN}✅ BBR已成功禁用${NC}"
-    else
-        echo -e "${RED}❌ BBR禁用失败${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回BBR配置菜单"
-    read -n1
-}
-
-# 为BBR安装新内核
-install_kernel_for_bbr() {
-    echo ""
-    echo -e "${YELLOW}正在检测系统并安装新内核...${NC}"
-
-    # 检测发行版
-    local distro=$(detect_linux_distro)
-    echo -e "${CYAN}检测到系统: $distro${NC}"
-
-    case "$distro" in
-        "centos6"|"centos7")
-            echo -e "${YELLOW}CentOS 6/7 需要安装ELRepo内核${NC}"
-            install_elrepo_kernel
-            ;;
-        "debian8"|"debian9"|"debian10")
-            echo -e "${YELLOW}Debian 8/9/10 需要安装backports内核${NC}"
-            install_debian_backports_kernel
-            ;;
-        "ubuntu16"|"ubuntu18")
-            echo -e "${YELLOW}Ubuntu 16/18 需要安装HWE内核${NC}"
-            install_ubuntu_hwe_kernel
-            ;;
-        *)
-            echo -e "${RED}❌ 不支持的系统版本或系统已支持BBR${NC}"
-            echo -e "${YELLOW}请手动升级内核到4.9+版本${NC}"
-            ;;
-    esac
-}
-
-# 检测Linux发行版详细信息
-detect_linux_distro() {
-    if [[ -f /etc/os-release ]]; then
-        source /etc/os-release
-        local distro_id=$(echo "$ID" | tr '[:upper:]' '[:lower:]')
-        local version_id="$VERSION_ID"
-
-        case "$distro_id" in
-            "centos")
-                if [[ "$version_id" =~ ^6 ]]; then
-                    echo "centos6"
-                elif [[ "$version_id" =~ ^7 ]]; then
-                    echo "centos7"
-                else
-                    echo "centos"
-                fi
-                ;;
-            "debian")
-                if [[ "$version_id" =~ ^8 ]]; then
-                    echo "debian8"
-                elif [[ "$version_id" =~ ^9 ]]; then
-                    echo "debian9"
-                elif [[ "$version_id" =~ ^10 ]]; then
-                    echo "debian10"
-                else
-                    echo "debian"
-                fi
-                ;;
-            "ubuntu")
-                if [[ "$version_id" =~ ^16 ]]; then
-                    echo "ubuntu16"
-                elif [[ "$version_id" =~ ^18 ]]; then
-                    echo "ubuntu18"
-                else
-                    echo "ubuntu"
-                fi
-                ;;
-            *)
-                echo "$distro_id"
-                ;;
-        esac
-    else
-        echo "unknown"
-    fi
-}
-
-# 安装ELRepo内核 (CentOS 6/7)
-install_elrepo_kernel() {
-    echo -e "${CYAN}安装ELRepo源和新内核...${NC}"
-
-    # 导入GPG密钥
-    rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
-
-    # 安装ELRepo源
-    local centos_version=$(rpm -q --queryformat '%{VERSION}' centos-release)
-    if [[ "$centos_version" =~ ^6 ]]; then
-        yum install -y https://www.elrepo.org/elrepo-release-6.el6.elrepo.noarch.rpm
-    else
-        yum install -y https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
-    fi
-
-    # 安装最新内核
-    yum --enablerepo=elrepo-kernel install -y kernel-ml
-
-    echo -e "${GREEN}✅ 新内核安装完成${NC}"
-    echo -e "${YELLOW}⚠️  请重启系统并选择新内核后再启用BBR${NC}"
-}
-
-# 安装Debian backports内核
-install_debian_backports_kernel() {
-    echo -e "${CYAN}添加Debian backports源并安装新内核...${NC}"
-
-    # 添加backports源
-    echo "deb http://deb.debian.org/debian $(lsb_release -sc)-backports main" > /etc/apt/sources.list.d/backports.list
-
-    # 更新包列表
-    apt update
-
-    # 安装新内核
-    apt install -y -t $(lsb_release -sc)-backports linux-image-amd64
-
-    echo -e "${GREEN}✅ 新内核安装完成${NC}"
-    echo -e "${YELLOW}⚠️  请重启系统后再启用BBR${NC}"
-}
-
-# 安装Ubuntu HWE内核
-install_ubuntu_hwe_kernel() {
-    echo -e "${CYAN}安装Ubuntu HWE内核...${NC}"
-
-    # 安装HWE内核
-    apt update
-    apt install -y linux-generic-hwe-$(lsb_release -rs | cut -d'.' -f1).04
-
-    echo -e "${GREEN}✅ HWE内核安装完成${NC}"
-    echo -e "${YELLOW}⚠️  请重启系统后再启用BBR${NC}"
-}
-
-# DNS修复菜单
-show_dns_repair_menu() {
-    local dns_selection=0
-    local dns_options=(
-        "Google DNS (8.8.8.8, 8.8.4.4)"
-        "Cloudflare DNS (1.1.1.1, 1.0.0.1)"
-        "查看当前DNS配置"
-        "恢复默认DNS配置"
-        "返回网络工具菜单"
-    )
-
-    while true; do
-        clear
-        print_logo
-
-        echo -e "${BLUE}${BOLD}DNS服务器修复${NC}"
-        echo ""
-        echo -e "${YELLOW}选择要设置的DNS服务器:${NC}"
-        echo ""
-
-        for i in "${!dns_options[@]}"; do
-            if [[ $i -eq $dns_selection ]]; then
-                echo -e "  ${GREEN}▶ ${dns_options[$i]}${NC}"
-            else
-                echo -e "    ${dns_options[$i]}"
-            fi
-        done
-
-        echo ""
-        echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回${NC}"
-
-        flush_input
-        local key=$(read_key)
-        case "$key" in
-            "UP")
-                if [[ $dns_selection -gt 0 ]]; then
-                    ((dns_selection--))
-                else
-                    dns_selection=$((${#dns_options[@]} - 1))
-                fi
-                ;;
-            "DOWN")
-                if [[ $dns_selection -lt $((${#dns_options[@]} - 1)) ]]; then
-                    ((dns_selection++))
-                else
-                    dns_selection=0
-                fi
-                ;;
-            "ENTER")
-                case $dns_selection in
-                    0) set_google_dns ;;
-                    1) set_cloudflare_dns ;;
-                    2) show_current_dns ;;
-                    3) restore_default_dns ;;
-                    4) return ;;
-                esac
-                ;;
-            "QUIT")
-                return
-                ;;
-            "OTHER")
-                # 忽略其他按键，继续循环
-                ;;
-            *)
-                # 对于未识别的按键，也忽略
-                ;;
-        esac
-    done
-}
-
-# 设置Google DNS
-set_google_dns() {
-    clear
-    echo -e "${BLUE}${BOLD}设置Google DNS${NC}"
-    echo ""
-
-    echo -e "${YELLOW}正在备份当前DNS配置...${NC}"
-    backup_dns_config
-
-    echo -e "${YELLOW}正在设置Google DNS (8.8.8.8, 8.8.4.4)...${NC}"
-
-    # 备份原始resolv.conf
-    if [[ -f /etc/resolv.conf ]]; then
-        cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
-    fi
-
-    # 写入新的DNS配置
-    cat > /etc/resolv.conf << EOF
-# Google DNS Configuration
-# Generated by WarpKit $(date)
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-EOF
-
-    if [[ $? -eq 0 ]]; then
-        echo -e "${GREEN}✅ Google DNS设置成功！${NC}"
-        echo ""
-        echo -e "${CYAN}新的DNS配置:${NC}"
-        echo "  主DNS: 8.8.8.8"
-        echo "  备DNS: 8.8.4.4"
-    else
-        echo -e "${RED}❌ DNS设置失败，可能需要管理员权限${NC}"
-    fi
-
-    echo ""
-    echo -e "${YELLOW}正在测试DNS解析...${NC}"
-    test_dns_resolution
-
-    echo ""
-    echo "按任意键返回DNS菜单"
-    read -n1
-}
-
-# 设置Cloudflare DNS
-set_cloudflare_dns() {
-    clear
-    echo -e "${BLUE}${BOLD}设置Cloudflare DNS${NC}"
-    echo ""
-
-    echo -e "${YELLOW}正在备份当前DNS配置...${NC}"
-    backup_dns_config
-
-    echo -e "${YELLOW}正在设置Cloudflare DNS (1.1.1.1, 1.0.0.1)...${NC}"
-
-    # 备份原始resolv.conf
-    if [[ -f /etc/resolv.conf ]]; then
-        cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
-    fi
-
-    # 写入新的DNS配置
-    cat > /etc/resolv.conf << EOF
-# Cloudflare DNS Configuration
-# Generated by WarpKit $(date)
-nameserver 1.1.1.1
-nameserver 1.0.0.1
-EOF
-
-    if [[ $? -eq 0 ]]; then
-        echo -e "${GREEN}✅ Cloudflare DNS设置成功！${NC}"
-        echo ""
-        echo -e "${CYAN}新的DNS配置:${NC}"
-        echo "  主DNS: 1.1.1.1"
-        echo "  备DNS: 1.0.0.1"
-    else
-        echo -e "${RED}❌ DNS设置失败，可能需要管理员权限${NC}"
-    fi
-
-    echo ""
-    echo -e "${YELLOW}正在测试DNS解析...${NC}"
-    test_dns_resolution
-
-    echo ""
-    echo "按任意键返回DNS菜单"
-    read -n1
-}
-
-# 备份DNS配置
-backup_dns_config() {
-    local backup_dir="$CONFIG_DIR/dns_backups"
-    local backup_file="$backup_dir/resolv.conf.backup.$(date +%Y%m%d_%H%M%S)"
-
-    mkdir -p "$backup_dir"
-
-    if [[ -f /etc/resolv.conf ]]; then
-        cp /etc/resolv.conf "$backup_file" 2>/dev/null && {
-            echo -e "${GREEN}✅ DNS配置已备份到: $backup_file${NC}"
-        } || {
-            echo -e "${YELLOW}⚠️ 无法备份DNS配置，继续执行...${NC}"
-        }
-    fi
-}
-
-# 显示当前DNS配置
-show_current_dns() {
-    clear
-    echo -e "${BLUE}${BOLD}当前DNS配置${NC}"
-    echo ""
-
-    if [[ -f /etc/resolv.conf ]]; then
-        echo -e "${CYAN}/etc/resolv.conf 内容:${NC}"
-        echo ""
-        cat /etc/resolv.conf | while IFS= read -r line; do
-            if [[ $line =~ ^nameserver ]]; then
-                echo -e "${GREEN}  $line${NC}"
-            elif [[ $line =~ ^# ]]; then
-                echo -e "${YELLOW}  $line${NC}"
-            else
-                echo "  $line"
-            fi
-        done
-    else
-        echo -e "${RED}❌ 未找到 /etc/resolv.conf 文件${NC}"
-    fi
-
-    echo ""
-    echo -e "${YELLOW}正在测试DNS解析性能...${NC}"
-    test_dns_resolution
-
-    echo ""
-    echo "按任意键返回DNS菜单"
-    read -n1
-}
-
-# 恢复默认DNS配置
-restore_default_dns() {
-    clear
-    echo -e "${BLUE}${BOLD}恢复默认DNS配置${NC}"
-    echo ""
-
-    local backup_dir="$CONFIG_DIR/dns_backups"
-    local latest_backup=$(ls -t "$backup_dir"/resolv.conf.backup.* 2>/dev/null | head -1)
-
-    if [[ -n "$latest_backup" ]]; then
-        echo -e "${YELLOW}发现备份文件: $(basename "$latest_backup")${NC}"
-        echo -e "${CYAN}是否恢复此备份？ [y/N]${NC}"
-        # 临时恢复终端模式进行输入
-        restore_terminal_state
-        read -r response
-        set_raw_terminal
-
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            cp "$latest_backup" /etc/resolv.conf 2>/dev/null && {
-                echo -e "${GREEN}✅ DNS配置已恢复${NC}"
-            } || {
-                echo -e "${RED}❌ 恢复失败，可能需要管理员权限${NC}"
-            }
-        else
-            echo -e "${YELLOW}取消恢复操作${NC}"
-        fi
-    else
-        echo -e "${YELLOW}未找到备份文件，恢复为基本配置...${NC}"
-        cat > /etc/resolv.conf << EOF
-# Default DNS Configuration
-# Restored by WarpKit $(date)
-nameserver 8.8.8.8
-nameserver 1.1.1.1
-EOF
-        echo -e "${GREEN}✅ 已设置为默认DNS配置${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回DNS菜单"
-    read -n1
-}
-
-# 测试DNS解析
-test_dns_resolution() {
-    local test_domains=("google.com" "cloudflare.com" "github.com")
-
-    echo ""
-    echo -e "${CYAN}DNS解析测试结果:${NC}"
-
-    if command -v nslookup >/dev/null 2>&1; then
-        for domain in "${test_domains[@]}"; do
-            local start_time=$(date +%s%N)
-            if nslookup "$domain" >/dev/null 2>&1; then
-                local end_time=$(date +%s%N)
-                local duration=$(( (end_time - start_time) / 1000000 ))
-                echo -e "${GREEN}  ✅ $domain - ${duration}ms${NC}"
-            else
-                echo -e "${RED}  ❌ $domain - 解析失败${NC}"
-            fi
-        done
-    elif command -v dig >/dev/null 2>&1; then
-        for domain in "${test_domains[@]}"; do
-            local start_time=$(date +%s%N)
-            if dig "$domain" >/dev/null 2>&1; then
-                local end_time=$(date +%s%N)
-                local duration=$(( (end_time - start_time) / 1000000 ))
-                echo -e "${GREEN}  ✅ $domain - ${duration}ms${NC}"
-            else
-                echo -e "${RED}  ❌ $domain - 解析失败${NC}"
-            fi
-        done
-    else
-        echo -e "${YELLOW}⚠️  nslookup和dig命令都不可用，无法进行DNS解析测试${NC}"
-    fi
-}
-
-# 网络连接测试
-test_network_connection() {
-    # 关闭errexit避免网络命令失败导致退出
-    set +e
-
-    clear
-    echo -e "${BLUE}${BOLD}网络连接测试${NC}"
-    echo ""
-
-    loading_animation "初始化网络检测" 1
-
-    update_status "info" "网络连接测试"
-
-    # 检查ping命令
-    if command -v ping >/dev/null 2>&1; then
-        show_command_output "ping -c 3 8.8.8.8" "测试网络连接" || true
-    else
-        echo -e "${YELLOW}⚠️  ping命令不可用${NC}"
-    fi
-
-    # 检查ss命令
-    if command -v ss >/dev/null 2>&1; then
-        show_command_output "ss -tulpn" "显示网络连接状态" || true
-    elif command -v netstat >/dev/null 2>&1; then
-        show_command_output "netstat -tulpn" "显示网络连接状态" || true
-    else
-        echo -e "${YELLOW}⚠️  ss和netstat命令都不可用${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回网络工具菜单"
-    read -n1
-
-    # 恢复errexit
-    set -e
-}
-
-# 显示网络配置
-show_network_config() {
-    # 关闭errexit避免网络命令失败导致退出
-    set +e
-
-    clear
-    echo -e "${BLUE}${BOLD}网络配置查看${NC}"
-    echo ""
-
-    echo -e "${CYAN}网络接口信息:${NC}"
-    if command -v ip >/dev/null 2>&1; then
-        ip addr show | grep -E "(inet |inet6 )" | head -10 || true
-    elif command -v ifconfig >/dev/null 2>&1; then
-        ifconfig | grep -E "inet " | head -10 || true
-    else
-        echo -e "${YELLOW}⚠️  ip和ifconfig命令都不可用${NC}"
-    fi
-
-    echo ""
-    echo -e "${CYAN}路由表信息:${NC}"
-    if command -v ip >/dev/null 2>&1; then
-        ip route show | head -5 || true
-    elif command -v route >/dev/null 2>&1; then
-        route -n | head -5 || true
-    else
-        echo -e "${YELLOW}⚠️  ip和route命令都不可用${NC}"
-    fi
-
-    echo ""
-    echo -e "${CYAN}DNS配置:${NC}"
-    cat /etc/resolv.conf 2>/dev/null || echo "无法读取DNS配置"
-
-    echo ""
-    echo "按任意键返回网络工具菜单"
-    read -n1
-
-    # 恢复errexit
-    set -e
-}
-
-# 端口扫描工具
-show_port_scanner() {
-    # 关闭errexit避免网络命令失败导致退出
-    set +e
-
-    clear
-    echo -e "${BLUE}${BOLD}端口扫描工具${NC}"
-    echo ""
-
-    echo -e "${YELLOW}常用端口检查:${NC}"
-    local common_ports=(22 80 443 3306 5432 6379 27017)
-
-    if command -v ss >/dev/null 2>&1; then
-        for port in "${common_ports[@]}"; do
-            if ss -tuln | grep -q ":$port " 2>/dev/null; then
-                echo -e "${GREEN}  ✅ 端口 $port - 开放${NC}"
-            else
-                echo -e "${RED}  ❌ 端口 $port - 关闭${NC}"
-            fi
-        done
-    elif command -v netstat >/dev/null 2>&1; then
-        for port in "${common_ports[@]}"; do
-            if netstat -tuln | grep -q ":$port " 2>/dev/null; then
-                echo -e "${GREEN}  ✅ 端口 $port - 开放${NC}"
-            else
-                echo -e "${RED}  ❌ 端口 $port - 关闭${NC}"
-            fi
-        done
-    else
-        echo -e "${YELLOW}⚠️  ss和netstat命令都不可用，无法检查端口状态${NC}"
-    fi
-
-    echo ""
-    echo "按任意键返回网络工具菜单"
-    read -n1
-
-    # 恢复errexit
-    set -e
-}
-
-# 日志查看演示
-show_log_viewer() {
-    # 关闭errexit避免日志命令失败导致退出
-    set +e
-
-    clear
-    echo -e "${BLUE}${BOLD}日志查看${NC}"
-    echo ""
-
-    loading_animation "准备日志查看器" 1
-
-    # 检查journalctl命令
-    if command -v journalctl >/dev/null 2>&1; then
-        show_command_output "journalctl -n 10 --no-pager" "显示最近的系统日志" || true
-    elif [[ -f /var/log/messages ]]; then
-        show_command_output "tail -n 10 /var/log/messages" "显示系统日志" || true
-    elif [[ -f /var/log/syslog ]]; then
-        show_command_output "tail -n 10 /var/log/syslog" "显示系统日志" || true
-    else
-        echo -e "${YELLOW}⚠️  journalctl命令不可用，且未找到常见日志文件${NC}"
-        echo -e "${CYAN}可能的日志位置:${NC}"
-        echo "  • /var/log/messages"
-        echo "  • /var/log/syslog"
-        echo "  • /var/log/kern.log"
-    fi
-
+    echo -e "${CYAN}包管理器: ${GREEN}$pkg_manager${NC}"
     echo ""
     echo "按任意键返回主菜单"
     read -n1
-
-    # 恢复errexit
-    set -e
 }
+
+
+
+# 网络工具菜单（内置版本）
+show_network_tools_builtin() {
+    clear
+    echo -e "${BLUE}${BOLD}网络工具${NC}"
+    echo ""
+    echo -e "${CYAN}网络状态:${NC}"
+    ping -c 1 8.8.8.8 >/dev/null 2>&1 && echo "✓ 网络连接正常" || echo "✗ 网络连接异常"
+    echo ""
+    echo "按任意键返回主菜单"
+    read -n1
+}
+
+# 日志查看演示（内置版本）
+show_log_viewer_builtin() {
+    clear
+    echo -e "${BLUE}${BOLD}日志查看${NC}"
+    echo ""
+    echo -e "${CYAN}系统日志:${NC}"
+    if command -v journalctl >/dev/null 2>&1; then
+        journalctl -n 10 --no-pager 2>/dev/null | head -5 || echo "系统日志: 不可用"
+    elif [[ -f /var/log/messages ]]; then
+        tail -5 /var/log/messages 2>/dev/null || echo "系统日志: 不可用"
+    else
+        echo "系统日志: 不可用"
+    fi
+    echo ""
+    echo "按任意键返回主菜单"
+    read -n1
+}
+
 
 # 系统更新演示
 show_system_update() {
@@ -2429,8 +1716,8 @@ main() {
     # 检测系统信息
     detect_distro
 
-    # 保存当前终端状态
-    save_terminal_state
+    # 初始化模块系统
+    init_module_system && debug_log "模块系统初始化成功" || debug_log "模块系统初始化失败，使用内置功能"
 
     # 设置退出时恢复终端
     trap 'restore_terminal_state; exit' EXIT INT TERM
@@ -2438,10 +1725,7 @@ main() {
     # 每日首次启动时检查更新（在设置终端模式之前）
     check_for_updates
 
-    # 设置原始终端模式
-    set_raw_terminal
-
-    # 开始导航
+    # 开始导航（新的选择器不需要预先设置终端模式）
     handle_navigation
 }
 
