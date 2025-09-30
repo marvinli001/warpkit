@@ -106,7 +106,7 @@ download_warpkit_files() {
 
     # 下载模块
     echo -e "${CYAN}下载功能模块...${NC}"
-    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh" "docker.sh" "streaming_check.sh" "backtrace_check.sh")
+    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh" "docker.sh" "streaming_check.sh" "backtrace_check.sh" "ipquality_check.sh")
     for module in "${modules[@]}"; do
         echo -e "${CYAN}  下载 $module...${NC}"
         if ! download_file "$GITHUB_RAW_URL/modules/$module" "$temp_dir/modules/$module"; then

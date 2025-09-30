@@ -10,6 +10,7 @@ show_network_tools() {
         "防火墙管理"
         "网络性能测试"
         "启用BBR内核网络加速"
+        "IP质量检测"
         "流媒体解锁检测"
         "回程路由检测"
         "返回主菜单"
@@ -32,9 +33,10 @@ show_network_tools() {
             1) show_firewall_management ;;
             2) show_performance_test ;;
             3) enable_bbr_acceleration ;;
-            4) show_streaming_unlock_check ;;
-            5) show_backtrace_check ;;
-            6) return ;;
+            4) show_ipquality_check ;;
+            5) show_streaming_unlock_check ;;
+            6) show_backtrace_check ;;
+            7) return ;;
             *)
                 debug_log "network module: 未知选择 $result"
                 return
@@ -56,11 +58,12 @@ show_network_tools_text_menu() {
         echo "2. 防火墙管理"
         echo "3. 网络性能测试"
         echo "4. 启用BBR内核网络加速"
-        echo "5. 流媒体解锁检测"
-        echo "6. 回程路由检测"
+        echo "5. IP质量检测"
+        echo "6. 流媒体解锁检测"
+        echo "7. 回程路由检测"
         echo "0. 返回主菜单"
         echo ""
-        echo -n "请选择功能 (0-6): "
+        echo -n "请选择功能 (0-7): "
 
         read -r choice
         echo ""
@@ -70,11 +73,12 @@ show_network_tools_text_menu() {
             2) show_firewall_management ;;
             3) show_performance_test ;;
             4) enable_bbr_acceleration ;;
-            5) show_streaming_unlock_check ;;
-            6) show_backtrace_check ;;
+            5) show_ipquality_check ;;
+            6) show_streaming_unlock_check ;;
+            7) show_backtrace_check ;;
             0) return ;;
             *)
-                echo -e "${RED}无效选择，请输入 0-6${NC}"
+                echo -e "${RED}无效选择，请输入 0-7${NC}"
                 sleep 2
                 ;;
         esac
@@ -625,6 +629,57 @@ show_backtrace_check() {
     read -r
 
     # 返回时清屏重新显示菜单
+    return
+}
+
+# IP质量检测
+show_ipquality_check() {
+    clear
+    echo -e "${BLUE}${BOLD}IP质量检测${NC}"
+    echo ""
+    echo -e "${YELLOW}准备运行 IP 质量检测脚本...${NC}"
+    echo ""
+
+    # 获取模块目录
+    local module_dir
+    if [[ -n "${BASH_SOURCE[0]}" ]]; then
+        module_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    else
+        module_dir="$(cd "$(dirname "$0")" && pwd)"
+    fi
+
+    local script_path="$module_dir/ipquality_check.sh"
+
+    # 检查脚本是否存在
+    if [[ ! -f "$script_path" ]]; then
+        echo -e "${RED}错误: IP 质量检测脚本不存在${NC}"
+        echo -e "${YELLOW}路径: $script_path${NC}"
+        echo ""
+        echo -e "${YELLOW}按 Enter 键返回...${NC}"
+        read -r
+        return 1
+    fi
+
+    # 运行脚本 (使用 -M 参数进入交互模式，-E 使用英文)
+    echo -e "${GREEN}正在启动 IP 质量检测...${NC}"
+    echo ""
+
+    # 直接执行脚本，不传递参数则为默认中文模式
+    bash "$script_path" -M
+
+    local exit_code=$?
+
+    echo ""
+    if [[ $exit_code -eq 0 ]]; then
+        echo -e "${GREEN}检测完成！${NC}"
+    else
+        echo -e "${YELLOW}检测完成${NC}"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}按 Enter 键返回网络工具菜单...${NC}"
+    read -r
+
     return
 }
 

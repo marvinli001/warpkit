@@ -298,7 +298,7 @@ update_modules() {
     mkdir -p "$temp_modules_dir"
 
     # 下载模块文件
-    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh" "docker.sh" "streaming_check.sh" "backtrace_check.sh")
+    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh" "docker.sh" "streaming_check.sh" "backtrace_check.sh" "ipquality_check.sh")
     local download_success=true
 
     for module in "${modules[@]}"; do
