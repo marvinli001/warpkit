@@ -2203,12 +2203,12 @@ M)mode_menu=1
 esac
 done
 if [[ $mode_menu -eq 1 ]];then
-if [[ $YY == "cn" ]];then
-eval "bash <(curl -sL https://Check.Place) -I"
-else
-eval "bash <(curl -sL https://Check.Place) -EI"
-fi
-exit 0
+# Modified for WarpKit: Use local script instead of downloading from Check.Place
+# The original script would download and execute the ad-supported version
+echo -e "${YELLOW}Interactive menu mode is not fully supported in WarpKit integration.${NC}"
+echo -e "${YELLOW}Running standard IP quality check instead...${NC}"
+echo ""
+# Continue with normal execution instead of re-downloading the script
 fi
 [[ $IPV4check -eq 1 && $IPV6check -eq 0 && $IPV4work -eq 0 ]]&&ERRORcode=40
 [[ $IPV4check -eq 0 && $IPV6check -eq 1 && $IPV6work -eq 0 ]]&&ERRORcode=60

@@ -660,12 +660,12 @@ show_ipquality_check() {
         return 1
     fi
 
-    # 运行脚本 (使用 -M 参数进入交互模式，-E 使用英文)
+    # 运行脚本（不使用 -M 参数，避免重新下载原始脚本）
     echo -e "${GREEN}正在启动 IP 质量检测...${NC}"
     echo ""
 
-    # 直接执行脚本，不传递参数则为默认中文模式
-    bash "$script_path" -M
+    # 直接执行脚本，使用本地的去广告版本
+    bash "$script_path"
 
     local exit_code=$?
 
