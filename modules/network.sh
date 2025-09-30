@@ -20,7 +20,12 @@ show_network_tools() {
         result=$(codex_selector "网络工具" "模块版本 - 增强功能" 0 "${network_options[@]}")
 
         case "$result" in
-            "CANCELLED"|"SELECTOR_ERROR")
+            "CANCELLED")
+                return
+                ;;
+            "SELECTOR_ERROR")
+                # 切换到文本菜单模式
+                show_network_tools_text_menu
                 return
                 ;;
             0) show_dns_toolbox ;;
@@ -33,6 +38,41 @@ show_network_tools() {
             *)
                 debug_log "network module: 未知选择 $result"
                 return
+                ;;
+        esac
+    done
+}
+
+# 网络工具文本菜单
+show_network_tools_text_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}${BOLD}网络工具${NC}"
+        echo ""
+        echo "1. DNS修复"
+        echo "2. 防火墙管理"
+        echo "3. 网络性能测试"
+        echo "4. 启用BBR内核网络加速"
+        echo "5. 流媒体解锁检测"
+        echo "6. 回程路由检测"
+        echo "7. 返回主菜单"
+        echo ""
+        echo -n "请选择功能 (1-7): "
+
+        read -r choice
+        echo ""
+
+        case "$choice" in
+            1) show_dns_toolbox ;;
+            2) show_firewall_management ;;
+            3) show_performance_test ;;
+            4) enable_bbr_acceleration ;;
+            5) show_streaming_unlock_check ;;
+            6) show_backtrace_check ;;
+            7) return ;;
+            *)
+                echo -e "${RED}无效选择，请输入 1-7${NC}"
+                sleep 2
                 ;;
         esac
     done

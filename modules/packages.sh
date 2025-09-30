@@ -38,7 +38,12 @@ show_package_management() {
         result=$(codex_selector "包管理" "检测到: $pkg_manager" 0 "${pkg_options[@]}")
 
         case "$result" in
-            "CANCELLED"|"SELECTOR_ERROR")
+            "CANCELLED")
+                return
+                ;;
+            "SELECTOR_ERROR")
+                # 切换到文本菜单模式
+                show_package_management_text_menu "$pkg_manager"
                 return
                 ;;
             0) show_smart_search "$pkg_manager" ;;
@@ -51,6 +56,44 @@ show_package_management() {
             *)
                 debug_log "packages module: 未知选择 $result"
                 return
+                ;;
+        esac
+    done
+}
+
+# 包管理文本菜单
+show_package_management_text_menu() {
+    local pkg_manager="$1"
+
+    while true; do
+        clear
+        echo -e "${BLUE}${BOLD}包管理${NC}"
+        echo -e "${GREEN}检测到包管理器: $pkg_manager${NC}"
+        echo ""
+        echo "1. 智能包搜索"
+        echo "2. 包依赖分析"
+        echo "3. 系统更新管理"
+        echo "4. 包安全检查"
+        echo "5. 清理优化"
+        echo "6. 包历史记录"
+        echo "7. 返回主菜单"
+        echo ""
+        echo -n "请选择功能 (1-7): "
+
+        read -r choice
+        echo ""
+
+        case "$choice" in
+            1) show_smart_search "$pkg_manager" ;;
+            2) show_dependency_analysis "$pkg_manager" ;;
+            3) show_update_management "$pkg_manager" ;;
+            4) show_security_check "$pkg_manager" ;;
+            5) show_cleanup_optimization "$pkg_manager" ;;
+            6) show_package_history "$pkg_manager" ;;
+            7) return ;;
+            *)
+                echo -e "${RED}无效选择，请输入 1-7${NC}"
+                sleep 2
                 ;;
         esac
     done

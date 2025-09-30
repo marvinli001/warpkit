@@ -20,7 +20,12 @@ show_system_monitor() {
         result=$(codex_selector "系统工具" "模块版本 - 增强功能" 0 "${monitor_options[@]}")
 
         case "$result" in
-            "CANCELLED"|"SELECTOR_ERROR")
+            "CANCELLED")
+                return
+                ;;
+            "SELECTOR_ERROR")
+                # 切换到文本菜单模式
+                show_system_monitor_text_menu
                 return
                 ;;
             0) show_realtime_status ;;
@@ -33,6 +38,41 @@ show_system_monitor() {
             *)
                 debug_log "system module: 未知选择 $result"
                 return
+                ;;
+        esac
+    done
+}
+
+# 系统工具文本菜单
+show_system_monitor_text_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}${BOLD}系统工具${NC}"
+        echo ""
+        echo "1. 实时系统状态"
+        echo "2. 进程管理"
+        echo "3. 磁盘使用情况"
+        echo "4. 系统负载历史"
+        echo "5. 软件源管理"
+        echo "6. SWAP内存管理"
+        echo "7. 返回主菜单"
+        echo ""
+        echo -n "请选择功能 (1-7): "
+
+        read -r choice
+        echo ""
+
+        case "$choice" in
+            1) show_realtime_status ;;
+            2) show_process_manager ;;
+            3) show_disk_usage ;;
+            4) show_load_history ;;
+            5) show_mirror_manager ;;
+            6) show_swap_manager ;;
+            7) return ;;
+            *)
+                echo -e "${RED}无效选择，请输入 1-7${NC}"
+                sleep 2
                 ;;
         esac
     done

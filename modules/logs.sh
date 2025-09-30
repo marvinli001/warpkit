@@ -20,7 +20,12 @@ show_log_viewer() {
         result=$(codex_selector "日志查看" "模块版本 - 增强功能" 0 "${log_options[@]}")
 
         case "$result" in
-            "CANCELLED"|"SELECTOR_ERROR")
+            "CANCELLED")
+                return
+                ;;
+            "SELECTOR_ERROR")
+                # 切换到文本菜单模式
+                show_log_viewer_text_menu
                 return
                 ;;
             0) show_system_log_analysis ;;
@@ -33,6 +38,41 @@ show_log_viewer() {
             *)
                 debug_log "logs module: 未知选择 $result"
                 return
+                ;;
+        esac
+    done
+}
+
+# 日志查看文本菜单
+show_log_viewer_text_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}${BOLD}日志查看${NC}"
+        echo ""
+        echo "1. 系统日志分析"
+        echo "2. 应用日志查看"
+        echo "3. 日志搜索"
+        echo "4. 实时日志监控"
+        echo "5. 日志统计"
+        echo "6. 日志清理"
+        echo "7. 返回主菜单"
+        echo ""
+        echo -n "请选择功能 (1-7): "
+
+        read -r choice
+        echo ""
+
+        case "$choice" in
+            1) show_system_log_analysis ;;
+            2) show_application_logs ;;
+            3) show_log_search ;;
+            4) show_realtime_monitor ;;
+            5) show_log_statistics ;;
+            6) show_log_cleanup ;;
+            7) return ;;
+            *)
+                echo -e "${RED}无效选择，请输入 1-7${NC}"
+                sleep 2
                 ;;
         esac
     done
