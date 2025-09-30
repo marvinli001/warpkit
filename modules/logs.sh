@@ -258,18 +258,34 @@ show_log_search() {
     echo -e "${BLUE}${BOLD}日志搜索${NC}"
     echo ""
 
-    echo -e "${CYAN}请输入搜索关键词:${NC}"
-    if ! restore_terminal_state; then
-        echo -e "${RED}终端状态恢复失败${NC}"
-        sleep 2
-        return
-    fi
-    read -r search_term
-    if ! set_raw_terminal; then
-        echo -e "${RED}终端模式设置失败${NC}"
-        sleep 2
-        return
-    fi
+    echo -e "${CYAN}请输入搜索关键词 (ESC 取消):${NC}"
+
+    # 读取输入，支持 ESC 取消
+    local search_term=""
+    local char
+    while IFS= read -r -s -n1 char; do
+        # ESC 键 (ASCII 27)
+        if [[ $char == $'\x1b' ]]; then
+            echo ""
+            return
+        fi
+        # Enter 键
+        if [[ -z $char ]]; then
+            break
+        fi
+        # Backspace
+        if [[ $char == $'\x7f' ]]; then
+            if [[ -n $search_term ]]; then
+                search_term="${search_term%?}"
+                echo -ne "\b \b"
+            fi
+            continue
+        fi
+        # 正常字符
+        search_term+="$char"
+        echo -n "$char"
+    done
+    echo ""
 
     if [[ -z "$search_term" ]]; then
         echo -e "${YELLOW}搜索词不能为空${NC}"
@@ -449,35 +465,37 @@ show_log_statistics() {
 
 # 日志清理
 show_log_cleanup() {
-    clear
-    echo -e "${BLUE}${BOLD}日志清理${NC}"
-    echo ""
+    while true; do
+        clear
+        echo -e "${BLUE}${BOLD}日志清理${NC}"
+        echo ""
 
-    echo -e "${RED}${BOLD}警告: 日志清理操作需要谨慎执行${NC}"
-    echo -e "${YELLOW}建议在清理前备份重要日志${NC}"
-    echo ""
+        echo -e "${RED}${BOLD}警告: 日志清理操作需要谨慎执行${NC}"
+        echo -e "${YELLOW}建议在清理前备份重要日志${NC}"
+        echo ""
 
-    local cleanup_options=(
-        "查看可清理的日志"
-        "清理旧的归档日志"
-        "清理journal日志"
-        "查看日志配置"
-        "返回上级菜单"
-    )
+        local cleanup_options=(
+            "查看可清理的日志"
+            "清理旧的归档日志"
+            "清理journal日志"
+            "查看日志配置"
+            "返回上级菜单"
+        )
 
-    local result
-    result=$(simple_selector "选择清理操作" "${cleanup_options[@]}")
+        local result
+        result=$(simple_selector "选择清理操作" "${cleanup_options[@]}")
 
-    case "$result" in
-        "CANCELLED"|"SELECTOR_ERROR")
-            return
-            ;;
-        0) show_cleanable_logs ;;
-        1) cleanup_archived_logs ;;
-        2) cleanup_journal_logs ;;
-        3) show_log_config ;;
-        4) return ;;
-    esac
+        case "$result" in
+            "CANCELLED"|"SELECTOR_ERROR")
+                return
+                ;;
+            0) show_cleanable_logs ;;
+            1) cleanup_archived_logs ;;
+            2) cleanup_journal_logs ;;
+            3) show_log_config ;;
+            4) return ;;
+        esac
+    done
 }
 
 # 显示可清理的日志
@@ -510,24 +528,296 @@ show_cleanable_logs() {
     read -n1
 }
 
+# 清理旧的归档日志
+cleanup_archived_logs() {
+    clear
+    echo -e "${BLUE}${BOLD}清理归档日志${NC}"
+    echo ""
+
+    echo -e "${YELLOW}正在查找归档日志...${NC}"
+    local archived_logs=$(find /var/log -name "*.gz" -o -name "*.old" -o -name "*.[0-9]" 2>/dev/null)
+
+    if [[ -z "$archived_logs" ]]; then
+        echo -e "${GREEN}未找到归档日志文件${NC}"
+        echo ""
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
+    fi
+
+    echo "$archived_logs" | head -20 | while read file; do
+        ls -lh "$file" 2>/dev/null | awk '{print "  " $9 " (" $5 ")"}'
+    done
+
+    echo ""
+    echo -e "${RED}警告: 这将删除以上归档日志文件${NC}"
+    echo -n "确认删除? [y/N]: "
+    read -r confirm
+
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        echo "$archived_logs" | xargs rm -f 2>/dev/null
+        echo -e "${GREEN}归档日志已清理${NC}"
+    else
+        echo "已取消"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}按任意键返回${NC}"
+    read -n1
+}
+
+# 清理journal日志
+cleanup_journal_logs() {
+    clear
+    echo -e "${BLUE}${BOLD}清理Journal日志${NC}"
+    echo ""
+
+    if ! command -v journalctl >/dev/null 2>&1; then
+        echo -e "${YELLOW}journalctl不可用${NC}"
+        echo ""
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
+    fi
+
+    echo -e "${GREEN}当前Journal占用:${NC}"
+    journalctl --disk-usage 2>/dev/null || echo "无法获取大小"
+    echo ""
+
+    echo -e "${CYAN}清理选项:${NC}"
+    echo "1. 保留最近7天"
+    echo "2. 保留最近30天"
+    echo "3. 限制大小为100M"
+    echo "0. 取消"
+    echo ""
+    echo -n "请选择: "
+    read -r choice
+
+    case "$choice" in
+        1)
+            sudo journalctl --vacuum-time=7d 2>/dev/null && echo -e "${GREEN}清理完成${NC}" || echo -e "${RED}清理失败${NC}"
+            ;;
+        2)
+            sudo journalctl --vacuum-time=30d 2>/dev/null && echo -e "${GREEN}清理完成${NC}" || echo -e "${RED}清理失败${NC}"
+            ;;
+        3)
+            sudo journalctl --vacuum-size=100M 2>/dev/null && echo -e "${GREEN}清理完成${NC}" || echo -e "${RED}清理失败${NC}"
+            ;;
+        0)
+            return
+            ;;
+    esac
+
+    echo ""
+    echo -e "${YELLOW}按任意键返回${NC}"
+    read -n1
+}
+
+# 查看日志配置
+show_log_config() {
+    clear
+    echo -e "${BLUE}${BOLD}日志配置${NC}"
+    echo ""
+
+    echo -e "${GREEN}Journal配置:${NC}"
+    if [[ -f /etc/systemd/journald.conf ]]; then
+        grep -v "^#" /etc/systemd/journald.conf | grep -v "^$" || echo "使用默认配置"
+    else
+        echo "配置文件不存在"
+    fi
+
+    echo ""
+    echo -e "${GREEN}Logrotate配置:${NC}"
+    if [[ -f /etc/logrotate.conf ]]; then
+        echo "主配置文件: /etc/logrotate.conf"
+        echo "配置目录: /etc/logrotate.d/"
+        ls -1 /etc/logrotate.d/ 2>/dev/null | head -10 | sed 's/^/  /'
+    else
+        echo "Logrotate未安装"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}按任意键返回${NC}"
+    read -n1
+}
+
+# 数据库日志
+show_database_logs() {
+    clear
+    echo -e "${BLUE}${BOLD}数据库日志${NC}"
+    echo ""
+
+    # 检查常见数据库日志
+    local db_logs=(
+        "/var/log/mysql/error.log"
+        "/var/log/mysql.log"
+        "/var/log/postgresql/postgresql.log"
+        "/var/log/mongodb/mongod.log"
+    )
+
+    local found_logs=()
+    for log_file in "${db_logs[@]}"; do
+        if [[ -f "$log_file" ]]; then
+            found_logs+=("$log_file")
+        fi
+    done
+
+    if [[ ${#found_logs[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}未找到常见的数据库日志文件${NC}"
+    else
+        echo -e "${GREEN}找到的数据库日志:${NC}"
+        for log_file in "${found_logs[@]}"; do
+            echo ""
+            echo -e "${CYAN}$log_file (最后10行):${NC}"
+            tail -10 "$log_file" 2>/dev/null || echo "无法读取"
+        done
+    fi
+
+    echo ""
+    echo -e "${YELLOW}按任意键返回${NC}"
+    read -n1
+}
+
+# 认证日志
+show_auth_logs() {
+    clear
+    echo -e "${BLUE}${BOLD}认证日志${NC}"
+    echo ""
+
+    if [[ -f /var/log/auth.log ]]; then
+        echo -e "${GREEN}认证日志 (最后20行):${NC}"
+        tail -20 /var/log/auth.log 2>/dev/null || echo "无法读取"
+    elif [[ -f /var/log/secure ]]; then
+        echo -e "${GREEN}认证日志 (最后20行):${NC}"
+        tail -20 /var/log/secure 2>/dev/null || echo "无法读取"
+    else
+        echo -e "${YELLOW}未找到认证日志文件${NC}"
+    fi
+
+    echo ""
+    echo -e "${GREEN}最近的登录成功:${NC}"
+    last | head -10 2>/dev/null || echo "无法获取登录记录"
+
+    echo ""
+    echo -e "${YELLOW}按任意键返回${NC}"
+    read -n1
+}
+
+# 实时自定义文件监控
+realtime_custom_file() {
+    clear
+    echo -e "${BLUE}${BOLD}自定义文件监控${NC}"
+    echo ""
+
+    echo -e "${CYAN}请输入要监控的日志文件路径 (ESC 取消):${NC}"
+
+    # 读取输入，支持 ESC 取消
+    local log_path=""
+    local char
+    while IFS= read -r -s -n1 char; do
+        # ESC 键
+        if [[ $char == $'\x1b' ]]; then
+            echo ""
+            return
+        fi
+        # Enter 键
+        if [[ -z $char ]]; then
+            break
+        fi
+        # Backspace
+        if [[ $char == $'\x7f' ]]; then
+            if [[ -n $log_path ]]; then
+                log_path="${log_path%?}"
+                echo -ne "\b \b"
+            fi
+            continue
+        fi
+        # 正常字符
+        log_path+="$char"
+        echo -n "$char"
+    done
+    echo ""
+
+    if [[ -z "$log_path" ]]; then
+        return
+    fi
+
+    if [[ ! -f "$log_path" ]]; then
+        echo -e "${RED}文件不存在: $log_path${NC}"
+        sleep 2
+        return
+    fi
+
+    clear
+    echo -e "${BLUE}${BOLD}监控: $log_path${NC}"
+    echo ""
+    echo -e "${YELLOW}监控5秒，按Ctrl+C停止...${NC}"
+    echo ""
+
+    timeout 5 tail -f "$log_path" 2>/dev/null || echo "无法监控文件"
+
+    echo ""
+    echo -e "${YELLOW}监控完成，按任意键返回${NC}"
+    read -n1
+}
+
+# 实时错误日志监控
+realtime_error_logs() {
+    clear
+    echo -e "${BLUE}${BOLD}实时错误日志监控${NC}"
+    echo ""
+    echo -e "${YELLOW}监控5秒，显示错误级别的日志...${NC}"
+    echo ""
+
+    if command -v journalctl >/dev/null 2>&1; then
+        echo -e "${GREEN}使用journalctl监控错误:${NC}"
+        timeout 5 journalctl -f -p err 2>/dev/null || echo "需要权限或journalctl不可用"
+    elif [[ -f /var/log/syslog ]]; then
+        echo -e "${GREEN}监控 /var/log/syslog 错误:${NC}"
+        timeout 5 tail -f /var/log/syslog 2>/dev/null | grep -i error || echo "无法监控"
+    else
+        echo "未找到可监控的错误日志"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}监控完成，按任意键返回${NC}"
+    read -n1
+}
+
 # 自定义日志查看
 show_custom_logs() {
     clear
     echo -e "${BLUE}${BOLD}自定义日志查看${NC}"
     echo ""
 
-    echo -e "${CYAN}请输入日志文件路径:${NC}"
-    if ! restore_terminal_state; then
-        echo -e "${RED}终端状态恢复失败${NC}"
-        sleep 2
-        return
-    fi
-    read -r log_path
-    if ! set_raw_terminal; then
-        echo -e "${RED}终端模式设置失败${NC}"
-        sleep 2
-        return
-    fi
+    echo -e "${CYAN}请输入日志文件路径 (ESC 取消):${NC}"
+
+    # 读取输入，支持 ESC 取消
+    local log_path=""
+    local char
+    while IFS= read -r -s -n1 char; do
+        # ESC 键
+        if [[ $char == $'\x1b' ]]; then
+            echo ""
+            return
+        fi
+        # Enter 键
+        if [[ -z $char ]]; then
+            break
+        fi
+        # Backspace
+        if [[ $char == $'\x7f' ]]; then
+            if [[ -n $log_path ]]; then
+                log_path="${log_path%?}"
+                echo -ne "\b \b"
+            fi
+            continue
+        fi
+        # 正常字符
+        log_path+="$char"
+        echo -n "$char"
+    done
+    echo ""
 
     if [[ -z "$log_path" ]]; then
         echo -e "${YELLOW}路径不能为空${NC}"
