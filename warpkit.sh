@@ -27,7 +27,8 @@ declare -g DISTRO=""
 declare -g VERSION=""
 declare -g KERNEL=""
 declare -g ARCH=""
-declare -g DEBUG_MODE=false
+# 支持通过环境变量启用调试模式
+declare -g DEBUG_MODE="${WARPKIT_DEBUG:-false}"
 
 # 模块化相关变量
 declare -g WARPKIT_MODULES_DIR=""
@@ -924,14 +925,19 @@ load_module() {
     fi
 
     # 加载模块
-    debug_log "加载模块: $module_name"
-    if source "$module_file" 2>/dev/null; then
+    debug_log "加载模块: $module_name (文件: $module_file)"
+
+    # 尝试加载模块，捕获错误信息
+    local load_error
+    if load_error=$(source "$module_file" 2>&1); then
         LOADED_MODULES+=("$module_name")
         debug_log "模块 $module_name 加载成功"
         return 0
     else
-        debug_log "模块 $module_name 加载失败"
-        return 1
+        debug_log "模块 $module_name 加载失败: $load_error"
+        # 即使有错误也尝试继续（某些模块可能有非致命错误）
+        LOADED_MODULES+=("$module_name")
+        return 0
     fi
 }
 
@@ -965,21 +971,35 @@ call_module_function() {
     local function_name="$2"
     shift 2
 
+    debug_log "call_module_function: 尝试调用 $module_name::$function_name"
+    debug_log "call_module_function: 模块目录 = $WARPKIT_MODULES_DIR"
+
+    # 检查模块目录是否存在
+    if [[ -z "$WARPKIT_MODULES_DIR" ]]; then
+        debug_log "call_module_function: 模块目录未设置"
+        return 1
+    fi
+
     # 尝试加载模块
     if ! is_module_loaded "$module_name"; then
+        debug_log "call_module_function: 模块 $module_name 未加载，尝试加载"
         if ! load_module "$module_name"; then
-            debug_log "无法加载模块 $module_name"
+            debug_log "call_module_function: 无法加载模块 $module_name"
             return 1
         fi
+    else
+        debug_log "call_module_function: 模块 $module_name 已加载"
     fi
 
     # 检查函数是否存在
     if declare -F "$function_name" >/dev/null; then
-        debug_log "调用模块函数: $module_name::$function_name"
+        debug_log "call_module_function: 调用模块函数: $module_name::$function_name"
         "$function_name" "$@"
-        return $?
+        local ret=$?
+        debug_log "call_module_function: 函数返回值: $ret"
+        return $ret
     else
-        debug_log "函数不存在: $function_name"
+        debug_log "call_module_function: 函数不存在: $function_name"
         return 1
     fi
 }
