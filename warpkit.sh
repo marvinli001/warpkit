@@ -1126,9 +1126,9 @@ show_text_menu() {
         echo "3. 网络工具"
         echo "4. 日志查看"
         echo "5. 脚本管理"
-        echo "6. 退出"
+        echo "0. 退出"
         echo ""
-        echo -n "请选择功能 (1-6): "
+        echo -n "请选择功能 (0-5): "
 
         read -r choice
         echo ""
@@ -1154,12 +1154,12 @@ show_text_menu() {
                 CURRENT_SELECTION=4
                 handle_menu_selection
                 ;;
-            6)
+            0)
                 echo -e "${YELLOW}再见！${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}无效选择，请输入 1-6${NC}"
+                echo -e "${RED}无效选择，请输入 0-5${NC}"
                 sleep 2
                 ;;
         esac

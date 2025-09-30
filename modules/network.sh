@@ -501,36 +501,38 @@ show_streaming_unlock_check() {
         return
     fi
 
-    # 创建临时目录
-    local temp_dir=$(mktemp -d)
-    local script_path="${temp_dir}/region_check.sh"
+    # 使用本地模块而不是下载外部脚本
+    local module_script=""
 
-    # 下载检测脚本
-    if ! curl -fsSL "https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/check.sh" -o "$script_path" 2>/dev/null; then
-        echo -e "${RED}下载检测脚本失败${NC}"
-        echo -e "${YELLOW}请检查网络连接或稍后重试${NC}"
-        rm -rf "$temp_dir"
+    # 查找模块脚本位置
+    if [[ -f "/usr/local/lib/warpkit/modules/streaming_check.sh" ]]; then
+        module_script="/usr/local/lib/warpkit/modules/streaming_check.sh"
+    elif [[ -f "$HOME/.local/lib/warpkit/modules/streaming_check.sh" ]]; then
+        module_script="$HOME/.local/lib/warpkit/modules/streaming_check.sh"
+    elif [[ -f "$(dirname "$(readlink -f "$0")")/../modules/streaming_check.sh" ]]; then
+        module_script="$(dirname "$(readlink -f "$0")")/../modules/streaming_check.sh"
+    elif [[ -f "./modules/streaming_check.sh" ]]; then
+        module_script="./modules/streaming_check.sh"
+    fi
+
+    if [[ -z "$module_script" || ! -f "$module_script" ]]; then
+        echo -e "${RED}错误: 找不到流媒体检测模块${NC}"
+        echo -e "${YELLOW}请重新安装 WarpKit${NC}"
         echo ""
         echo -e "${YELLOW}按任意键返回${NC}"
         read -n1
         return
     fi
 
-    # 设置执行权限
-    chmod +x "$script_path"
-
-    echo -e "${GREEN}下载完成，开始检测...${NC}"
+    echo -e "${GREEN}开始检测...${NC}"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    # 执行检测脚本
-    bash "$script_path"
+    # 执行本地检测脚本
+    bash "$module_script"
 
     local exit_code=$?
-
-    # 清理临时文件
-    rm -rf "$temp_dir"
 
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -571,89 +573,53 @@ show_backtrace_check() {
     echo -e "${BLUE}${BOLD}回程路由检测${NC}"
     echo ""
 
-    # 检查是否已安装backtrace工具
-    if command -v backtrace >/dev/null 2>&1; then
-        echo -e "${GREEN}检测到已安装 backtrace 工具${NC}"
+    # 检查依赖
+    if ! command -v curl >/dev/null 2>&1; then
+        echo -e "${RED}错误: 未找到 curl 命令${NC}"
+        echo -e "${YELLOW}请先安装 curl:${NC}"
+        echo "  Ubuntu/Debian: sudo apt install curl"
+        echo "  CentOS/RHEL:   sudo yum install curl"
         echo ""
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-
-        # 直接运行backtrace
-        backtrace
-
-        local exit_code=$?
-
-        echo ""
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-
-        if [[ $exit_code -eq 0 ]]; then
-            echo -e "${GREEN}检测完成！${NC}"
-        else
-            echo -e "${YELLOW}检测完成（部分项可能失败）${NC}"
-        fi
-    else
-        echo -e "${CYAN}正在下载并安装 backtrace 工具...${NC}"
-        echo ""
-
-        # 检查依赖
-        if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-            echo -e "${RED}错误: 未找到 curl 或 wget 命令${NC}"
-            echo -e "${YELLOW}请先安装其中之一:${NC}"
-            echo "  Ubuntu/Debian: sudo apt install curl"
-            echo "  CentOS/RHEL:   sudo yum install curl"
-            echo ""
-            echo -e "${YELLOW}按任意键返回${NC}"
-            read -n1
-            return
-        fi
-
-        # 下载并安装backtrace
-        echo -e "${CYAN}正在执行安装脚本...${NC}"
-        echo ""
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-
-        if curl -fsSL "https://raw.githubusercontent.com/oneclickvirt/backtrace/main/backtrace_install.sh" 2>/dev/null | bash; then
-            echo ""
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo ""
-            echo -e "${GREEN}安装完成，开始检测...${NC}"
-            echo ""
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo ""
-
-            # 运行backtrace检测
-            if command -v backtrace >/dev/null 2>&1; then
-                backtrace
-                local exit_code=$?
-
-                echo ""
-                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo ""
-
-                if [[ $exit_code -eq 0 ]]; then
-                    echo -e "${GREEN}检测完成！${NC}"
-                else
-                    echo -e "${YELLOW}检测完成（部分项可能失败）${NC}"
-                fi
-            else
-                echo ""
-                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo ""
-                echo -e "${RED}安装失败，无法运行 backtrace 命令${NC}"
-            fi
-        else
-            echo ""
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo ""
-            echo -e "${RED}下载或安装脚本失败${NC}"
-            echo -e "${YELLOW}请检查网络连接或稍后重试${NC}"
-        fi
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
     fi
 
+    # 使用本地模块而不是下载外部脚本
+    local module_script=""
+
+    # 查找模块脚本位置
+    if [[ -f "/usr/local/lib/warpkit/modules/backtrace_check.sh" ]]; then
+        module_script="/usr/local/lib/warpkit/modules/backtrace_check.sh"
+    elif [[ -f "$HOME/.local/lib/warpkit/modules/backtrace_check.sh" ]]; then
+        module_script="$HOME/.local/lib/warpkit/modules/backtrace_check.sh"
+    elif [[ -f "$(dirname "$(readlink -f "$0")")/../modules/backtrace_check.sh" ]]; then
+        module_script="$(dirname "$(readlink -f "$0")")/../modules/backtrace_check.sh"
+    elif [[ -f "./modules/backtrace_check.sh" ]]; then
+        module_script="./modules/backtrace_check.sh"
+    fi
+
+    if [[ -z "$module_script" || ! -f "$module_script" ]]; then
+        echo -e "${RED}错误: 找不到回程路由检测模块${NC}"
+        echo -e "${YELLOW}请重新安装 WarpKit${NC}"
+        echo ""
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
+    fi
+
+    # 执行本地检测脚本
+    bash "$module_script"
+
+    local exit_code=$?
+
     echo ""
-    echo -e "${CYAN}提示: backtrace 工具已安装到系统，下次检测将直接运行${NC}"
+    if [[ $exit_code -eq 0 ]]; then
+        echo -e "${GREEN}检测完成！${NC}"
+    else
+        echo -e "${YELLOW}检测完成（部分项可能失败）${NC}"
+    fi
+
     echo ""
     echo -e "${YELLOW}按 Enter 键返回网络工具菜单...${NC}"
     read -r
