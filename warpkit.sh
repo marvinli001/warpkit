@@ -238,15 +238,17 @@ perform_update() {
         return 1
     fi
 
-    # 更新模块（如果存在）
-    update_modules
-
     # 替换当前脚本
     echo -e "${BLUE}🔄 安装新版本...${NC}"
     if cp "$temp_file" "$script_path" && chmod +x "$script_path"; then
         rm -f "$temp_file"
         # 保存新版本信息
         save_current_version "$new_version"
+
+        # 使用新版本更新模块
+        echo -e "${BLUE}⬇️ 使用新版本更新模块...${NC}"
+        update_modules_from_new_version
+
         echo -e "${GREEN}✅ 更新成功！已更新到 $new_version${NC}"
         echo -e "${YELLOW}备份文件保存在: $backup_path${NC}"
         echo -e "${CYAN}请重新运行 warpkit 以使用新版本${NC}"
@@ -346,6 +348,92 @@ update_modules() {
         fi
     else
         echo -e "${YELLOW}⚠️ 部分模块更新失败，但主程序更新将继续${NC}"
+    fi
+
+    # 清理临时文件
+    rm -rf "$temp_modules_dir"
+}
+
+# 从新版本更新模块（动态获取模块列表）
+update_modules_from_new_version() {
+    # 检测模块安装路径
+    local module_dirs=(
+        "/usr/local/lib/warpkit/modules"
+        "$HOME/.local/lib/warpkit/modules"
+    )
+
+    local modules_dir=""
+    for dir in "${module_dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            modules_dir="$dir"
+            break
+        fi
+    done
+
+    # 如果未找到模块目录，直接返回
+    if [[ -z "$modules_dir" ]]; then
+        echo -e "${YELLOW}⚠️ 未找到模块目录，跳过模块更新${NC}"
+        return 0
+    fi
+
+    # 创建临时目录
+    local temp_modules_dir="/tmp/warpkit_modules_update"
+    mkdir -p "$temp_modules_dir"
+
+    # 从 GitHub 获取 modules 目录下的所有 .sh 文件列表
+    echo -e "${CYAN}  获取模块列表...${NC}"
+    local modules_list
+    if command -v curl >/dev/null 2>&1; then
+        modules_list=$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/contents/modules" 2>/dev/null | grep -oP '"name":\s*"\K[^"]*\.sh(?=")')
+    elif command -v wget >/dev/null 2>&1; then
+        modules_list=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/contents/modules" 2>/dev/null | grep -oP '"name":\s*"\K[^"]*\.sh(?=")')
+    fi
+
+    if [[ -z "$modules_list" ]]; then
+        echo -e "${YELLOW}  ⚠️ 无法获取模块列表，使用默认列表${NC}"
+        modules_list="system.sh packages.sh network.sh logs.sh docker.sh streaming_check.sh backtrace_check.sh ipquality_check.sh"
+    fi
+
+    # 下载所有模块
+    local download_success=true
+    for module in $modules_list; do
+        echo -e "${CYAN}  下载 $module...${NC}"
+        if command -v curl >/dev/null 2>&1; then
+            if ! curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPO/master/modules/$module" -o "$temp_modules_dir/$module"; then
+                echo -e "${YELLOW}  ⚠️ $module 下载失败${NC}"
+                download_success=false
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if ! wget -qO "$temp_modules_dir/$module" "https://raw.githubusercontent.com/$GITHUB_REPO/master/modules/$module"; then
+                echo -e "${YELLOW}  ⚠️ $module 下载失败${NC}"
+                download_success=false
+            fi
+        fi
+    done
+
+    # 安装新模块
+    if [[ "$download_success" == "true" ]] || [[ -n "$(ls -A "$temp_modules_dir" 2>/dev/null)" ]]; then
+        local install_failed=false
+        for module_file in "$temp_modules_dir"/*.sh; do
+            if [[ -f "$module_file" ]]; then
+                local module_name=$(basename "$module_file")
+                if cp "$module_file" "$modules_dir/" 2>/dev/null; then
+                    chmod +x "$modules_dir/$module_name" 2>/dev/null || true
+                    echo -e "${GREEN}  ✓ $module_name${NC}"
+                else
+                    echo -e "${YELLOW}  ⚠️ 安装 $module_name 失败${NC}"
+                    install_failed=true
+                fi
+            fi
+        done
+
+        if [[ "$install_failed" == "false" ]]; then
+            echo -e "${GREEN}✅ 模块更新完成${NC}"
+        else
+            echo -e "${YELLOW}⚠️ 部分模块安装失败${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️ 模块更新失败${NC}"
     fi
 
     # 清理临时文件
