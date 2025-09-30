@@ -64,12 +64,27 @@ show_smart_search() {
     echo ""
 
     echo -e "${CYAN}请输入搜索关键词:${NC}"
-    restore_terminal_state
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
     read -r search_term
-    set_raw_terminal
+    if ! set_raw_terminal; then
+        echo -e "${RED}终端模式设置失败${NC}"
+        sleep 2
+        return
+    fi
 
     if [[ -z "$search_term" ]]; then
         echo -e "${YELLOW}搜索词不能为空${NC}"
+        sleep 2
+        return
+    fi
+
+    # 验证输入安全性（基本验证，防止命令注入）
+    if [[ "$search_term" =~ [\;\&\|\`\$\(\)] ]]; then
+        echo -e "${RED}输入包含非法字符${NC}"
         sleep 2
         return
     fi
@@ -120,12 +135,27 @@ show_dependency_analysis() {
     echo ""
 
     echo -e "${CYAN}请输入包名:${NC}"
-    restore_terminal_state
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
     read -r package_name
-    set_raw_terminal
+    if ! set_raw_terminal; then
+        echo -e "${RED}终端模式设置失败${NC}"
+        sleep 2
+        return
+    fi
 
     if [[ -z "$package_name" ]]; then
         echo -e "${YELLOW}包名不能为空${NC}"
+        sleep 2
+        return
+    fi
+
+    # 验证包名格式
+    if ! validate_package_name "$package_name"; then
+        echo -e "${RED}包名格式无效${NC}"
         sleep 2
         return
     fi

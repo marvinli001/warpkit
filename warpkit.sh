@@ -278,8 +278,15 @@ update_modules() {
         fi
     done
 
+    # 如果未找到模块目录，直接返回
     if [[ -z "$modules_dir" ]]; then
         echo -e "${YELLOW}⚠️ 未找到模块目录，跳过模块更新${NC}"
+        return 0
+    fi
+
+    # 确保模块目录有效
+    if [[ ! -d "$modules_dir" || ! -w "$modules_dir" ]]; then
+        echo -e "${YELLOW}⚠️ 模块目录无效或无写入权限，跳过模块更新${NC}"
         return 0
     fi
 
@@ -312,13 +319,30 @@ update_modules() {
         # 备份现有模块
         if [[ -d "$modules_dir" ]]; then
             local modules_backup="${modules_dir}.backup.$(date +%Y%m%d_%H%M%S)"
-            cp -r "$modules_dir" "$modules_backup" 2>/dev/null
+            if ! cp -r "$modules_dir" "$modules_backup" 2>/dev/null; then
+                echo -e "${YELLOW}⚠️ 备份模块失败，继续更新${NC}"
+            fi
         fi
 
-        # 安装新模块
-        cp "$temp_modules_dir"/*.sh "$modules_dir/" 2>/dev/null
-        chmod +x "$modules_dir"/*.sh 2>/dev/null
-        echo -e "${GREEN}✅ 模块更新完成${NC}"
+        # 安装新模块（带错误检查）
+        local install_failed=false
+        for module_file in "$temp_modules_dir"/*.sh; do
+            if [[ -f "$module_file" ]]; then
+                local module_name=$(basename "$module_file")
+                if cp "$module_file" "$modules_dir/" 2>/dev/null; then
+                    chmod +x "$modules_dir/$module_name" 2>/dev/null || true
+                else
+                    echo -e "${YELLOW}  ⚠️ 安装 $module_name 失败${NC}"
+                    install_failed=true
+                fi
+            fi
+        done
+
+        if [[ "$install_failed" == "false" ]]; then
+            echo -e "${GREEN}✅ 模块更新完成${NC}"
+        else
+            echo -e "${YELLOW}⚠️ 部分模块安装失败${NC}"
+        fi
     else
         echo -e "${YELLOW}⚠️ 部分模块更新失败，但主程序更新将继续${NC}"
     fi
@@ -331,15 +355,19 @@ update_modules() {
 detect_distro() {
     # 首先尝试从 /etc/os-release 获取信息（最标准的方法）
     if [[ -f /etc/os-release ]]; then
-        source /etc/os-release
-        DISTRO="$ID"
-        VERSION="${VERSION_ID:-$VERSION}"
+        # 使用子shell避免污染当前环境
+        local os_info
+        os_info=$(source /etc/os-release 2>/dev/null && echo "$ID|${VERSION_ID:-$VERSION}")
+        DISTRO=$(echo "$os_info" | cut -d'|' -f1)
+        VERSION=$(echo "$os_info" | cut -d'|' -f2)
 
     # Ubuntu/Debian 系统的 lsb-release
     elif [[ -f /etc/lsb-release ]]; then
-        source /etc/lsb-release
-        DISTRO=$(echo "$DISTRIB_ID" | tr '[:upper:]' '[:lower:]')
-        VERSION="$DISTRIB_RELEASE"
+        # 使用子shell避免污染当前环境
+        local lsb_info
+        lsb_info=$(source /etc/lsb-release 2>/dev/null && echo "$DISTRIB_ID|$DISTRIB_RELEASE")
+        DISTRO=$(echo "$lsb_info" | cut -d'|' -f1 | tr '[:upper:]' '[:lower:]')
+        VERSION=$(echo "$lsb_info" | cut -d'|' -f2)
 
     # Red Hat 系列
     elif [[ -f /etc/redhat-release ]]; then
@@ -411,9 +439,10 @@ detect_distro() {
         *)
             # 未知发行版，尝试从 ID_LIKE 获取兼容信息
             if [[ -f /etc/os-release ]]; then
-                source /etc/os-release
-                if [[ -n "${ID_LIKE:-}" ]]; then
-                    DISTRO="$ID_LIKE"
+                local id_like
+                id_like=$(source /etc/os-release 2>/dev/null && echo "${ID_LIKE:-}")
+                if [[ -n "$id_like" ]]; then
+                    DISTRO="$id_like"
                 fi
             fi
             ;;
@@ -540,6 +569,65 @@ multi_step_task() {
     echo -e "${GREEN}${BOLD}所有步骤完成!${NC}"
 }
 
+# 验证域名格式
+validate_domain() {
+    local domain="$1"
+    # 检查是否为空
+    if [[ -z "$domain" ]]; then
+        return 1
+    fi
+    # 检查域名格式（允许字母、数字、点、连字符）
+    if [[ ! "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+        return 1
+    fi
+    # 检查长度
+    if [[ ${#domain} -gt 253 ]]; then
+        return 1
+    fi
+    return 0
+}
+
+# 验证包名格式
+validate_package_name() {
+    local pkg_name="$1"
+    # 检查是否为空
+    if [[ -z "$pkg_name" ]]; then
+        return 1
+    fi
+    # 检查包名格式（允许字母、数字、点、连字符、下划线、加号）
+    if [[ ! "$pkg_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9\.\-_+]*$ ]]; then
+        return 1
+    fi
+    # 检查长度
+    if [[ ${#pkg_name} -gt 255 ]]; then
+        return 1
+    fi
+    return 0
+}
+
+# 验证文件路径安全性
+validate_file_path() {
+    local path="$1"
+    # 检查是否为空
+    if [[ -z "$path" ]]; then
+        return 1
+    fi
+    # 禁止路径遍历
+    if [[ "$path" == *".."* ]]; then
+        return 1
+    fi
+    # 检查路径长度
+    if [[ ${#path} -gt 4096 ]]; then
+        return 1
+    fi
+    # 必须是绝对路径或相对路径
+    if [[ ! "$path" =~ ^(/|\./) ]]; then
+        # 如果不是以 / 或 ./ 开头，添加 ./
+        path="./$path"
+    fi
+    return 0
+}
+
 # 检测UTF-8支持
 detect_utf8_support() {
     if [[ "${LC_ALL:-${LANG:-}}" =~ [Uu][Tt][Ff]-?8 ]] && [[ -t 1 ]]; then
@@ -637,8 +725,15 @@ codex_selector() {
         return 1
     fi
 
-    # 验证初始索引
+    # 验证初始索引是否为数字
+    if ! [[ "$initial_index" =~ ^[0-9]+$ ]]; then
+        debug_log "codex_selector: initial_index 不是数字，重置为 0"
+        initial_index=0
+    fi
+
+    # 验证初始索引范围
     if [[ $initial_index -lt 0 || $initial_index -ge ${#options[@]} ]]; then
+        debug_log "codex_selector: initial_index 超出范围，重置为 0"
         initial_index=0
     fi
 
@@ -668,7 +763,11 @@ codex_selector() {
 
     debug_log "codex_selector: 开始选择器，选项数=${#options[@]}, 初始索引=$initial_index"
 
-    # 关闭errexit，避免UI意外退出
+    # 关闭errexit，避免UI意外退出，但保存原始状态
+    local errexit_was_set=false
+    if [[ $- =~ e ]]; then
+        errexit_was_set=true
+    fi
     set +e
 
     # 主循环
@@ -726,8 +825,10 @@ codex_selector() {
         esac
     done
 
-    # 恢复errexit
-    set -e
+    # 恢复errexit（如果之前是开启的）
+    if [[ "$errexit_was_set" == "true" ]]; then
+        set -e
+    fi
 
     # 恢复终端状态
     restore_terminal_state
@@ -880,7 +981,7 @@ handle_modular_menu_item() {
     local item="$1"
 
     case "$item" in
-        "系统监控")
+        "系统工具")
             if call_module_function "system" "show_system_monitor"; then
                 return 0
             else
@@ -917,7 +1018,7 @@ handle_modular_menu_item() {
 # 显示主菜单 (新选择器版本)
 show_main_menu() {
     local main_options=(
-        "系统监控"
+        "系统工具"
         "包管理"
         "网络工具"
         "日志查看"
@@ -968,7 +1069,7 @@ show_text_menu() {
 
         echo -e "${CYAN}${BOLD}主菜单${NC}"
         echo ""
-        echo "1. 系统监控"
+        echo "1. 系统工具"
         echo "2. 包管理"
         echo "3. 网络工具"
         echo "4. 日志查看"
@@ -1015,7 +1116,8 @@ show_text_menu() {
 
 # 全局终端状态变量
 declare -g TERMINAL_STATE_SAVED=false
-declare -g TERMINAL_STATE_FILE="/tmp/warpkit_terminal_state.$$"
+# 使用更安全的临时文件命名（包含随机数和时间戳）
+declare -g TERMINAL_STATE_FILE="/tmp/warpkit_terminal_state.$$.$(date +%s).${RANDOM}"
 declare -g IN_ALTERNATE_SCREEN=false
 
 # 保存终端状态
@@ -1292,7 +1394,7 @@ handle_navigation() {
 # 处理菜单选择
 handle_menu_selection() {
     local main_options=(
-        "系统监控"
+        "系统工具"
         "包管理"
         "网络工具"
         "日志查看"
@@ -1315,7 +1417,7 @@ handle_menu_selection() {
             # 尝试使用模块化处理，失败则使用内置功能
             if ! handle_modular_menu_item "$selected_option"; then
                 case "$selected_option" in
-                    "系统监控")
+                    "系统工具")
                         show_system_monitor_builtin
                         ;;
                     "包管理")
@@ -1333,10 +1435,10 @@ handle_menu_selection() {
     esac
 }
 
-# 系统监控演示（内置版本）
+# 系统工具演示（内置版本）
 show_system_monitor_builtin() {
     clear
-    echo -e "${BLUE}${BOLD}系统监控${NC}"
+    echo -e "${BLUE}${BOLD}系统工具${NC}"
     echo ""
     echo -e "${CYAN}系统信息:${NC}"
     uptime 2>/dev/null || echo "系统运行时间: 不可用"
@@ -1514,15 +1616,6 @@ parse_arguments() {
 
 # 脚本管理菜单
 show_script_management() {
-    local script_selection=0
-    local script_options=(
-        "检查更新"
-        "卸载WarpKit"
-        "查看版本信息"
-        "清理缓存文件"
-        "返回主菜单"
-    )
-
     while true; do
         clear
         print_logo
@@ -1532,51 +1625,36 @@ show_script_management() {
         echo -e "${CYAN}当前版本: $(get_current_version)${NC}"
         echo ""
 
-        for i in "${!script_options[@]}"; do
-            if [[ $i -eq $script_selection ]]; then
-                echo -e "  ${GREEN}▶ ${script_options[$i]}${NC}"
-            else
-                echo -e "    ${script_options[$i]}"
-            fi
-        done
-
+        echo "1. 检查更新"
+        echo "2. 卸载WarpKit"
+        echo "3. 查看版本信息"
+        echo "4. 清理缓存文件"
+        echo "5. 返回主菜单"
         echo ""
-        echo -e "${YELLOW}使用 ↑/↓ 选择，Enter 确认，q 返回主菜单${NC}"
+        echo -n "请选择功能 (1-5): "
 
-        flush_input
-        local key=$(read_key)
-        case "$key" in
-            "UP")
-                if [[ $script_selection -gt 0 ]]; then
-                    ((script_selection--))
-                else
-                    script_selection=$((${#script_options[@]} - 1))
-                fi
+        read -r choice
+        echo ""
+
+        case "$choice" in
+            1)
+                manual_check_update
                 ;;
-            "DOWN")
-                if [[ $script_selection -lt $((${#script_options[@]} - 1)) ]]; then
-                    ((script_selection++))
-                else
-                    script_selection=0
-                fi
+            2)
+                uninstall_warpkit
                 ;;
-            "ENTER")
-                case $script_selection in
-                    0) manual_check_update ;;
-                    1) uninstall_warpkit ;;
-                    2) show_version_info ;;
-                    3) clean_cache_files ;;
-                    4) return ;;
-                esac
+            3)
+                show_version_info
                 ;;
-            "QUIT")
+            4)
+                clean_cache_files
+                ;;
+            5)
                 return
                 ;;
-            "OTHER")
-                # 忽略其他按键，继续循环
-                ;;
             *)
-                # 对于未识别的按键，也忽略
+                echo -e "${RED}无效选择，请输入 1-5${NC}"
+                sleep 2
                 ;;
         esac
     done
@@ -1614,9 +1692,16 @@ uninstall_warpkit() {
 
     echo -e "${CYAN}确定要卸载WarpKit吗？ [y/N]${NC}"
     # 临时恢复终端模式进行输入
-    stty echo icanon 2>/dev/null
+    local old_stty=""
+    old_stty=$(stty -g 2>/dev/null)
+    stty echo icanon 2>/dev/null || true
     read -r response
-    stty -echo -icanon 2>/dev/null
+    # 恢复之前的终端状态
+    if [[ -n "$old_stty" ]]; then
+        stty "$old_stty" 2>/dev/null || stty -echo -icanon 2>/dev/null || true
+    else
+        stty -echo -icanon 2>/dev/null || true
+    fi
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         echo ""
@@ -1733,9 +1818,16 @@ clean_cache_files() {
     echo ""
     echo -e "${CYAN}确定要清理所有缓存文件吗？ [y/N]${NC}"
     # 临时恢复终端模式进行输入
-    stty echo icanon 2>/dev/null
+    local old_stty=""
+    old_stty=$(stty -g 2>/dev/null)
+    stty echo icanon 2>/dev/null || true
     read -r response
-    stty -echo -icanon 2>/dev/null
+    # 恢复之前的终端状态
+    if [[ -n "$old_stty" ]]; then
+        stty "$old_stty" 2>/dev/null || stty -echo -icanon 2>/dev/null || true
+    else
+        stty -echo -icanon 2>/dev/null || true
+    fi
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
         echo ""

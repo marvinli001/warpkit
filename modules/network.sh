@@ -6,12 +6,12 @@
 # 网络工具主界面
 show_network_tools() {
     local network_options=(
-        "网络诊断"
-        "连接监控"
-        "DNS工具箱"
+        "DNS修复"
         "防火墙管理"
         "网络性能测试"
-        "SSL/TLS检查"
+        "启用BBR内核网络加速"
+        "流媒体解锁检测"
+        "回程路由检测"
         "返回主菜单"
     )
 
@@ -23,12 +23,12 @@ show_network_tools() {
             "CANCELLED"|"SELECTOR_ERROR")
                 return
                 ;;
-            0) show_network_diagnostics ;;
-            1) show_connection_monitor ;;
-            2) show_dns_toolbox ;;
-            3) show_firewall_management ;;
-            4) show_performance_test ;;
-            5) show_ssl_check ;;
+            0) show_dns_toolbox ;;
+            1) show_firewall_management ;;
+            2) show_performance_test ;;
+            3) enable_bbr_acceleration ;;
+            4) show_streaming_unlock_check ;;
+            5) show_backtrace_check ;;
             6) return ;;
             *)
                 debug_log "network module: 未知选择 $result"
@@ -38,157 +38,17 @@ show_network_tools() {
     done
 }
 
-# 网络诊断
-show_network_diagnostics() {
-    clear
-    echo -e "${BLUE}${BOLD}网络诊断${NC}"
-    echo ""
-
-    echo -e "${YELLOW}正在进行网络诊断...${NC}"
-    echo ""
-
-    # 基本连通性测试
-    echo -e "${GREEN}1. 基本连通性测试:${NC}"
-    local test_hosts=("8.8.8.8" "1.1.1.1" "google.com")
-    for host in "${test_hosts[@]}"; do
-        if ping -c 1 -W 3 "$host" >/dev/null 2>&1; then
-            echo "  ✓ $host - 可达"
-        else
-            echo "  ✗ $host - 不可达"
-        fi
-    done
-    echo ""
-
-    # DNS解析测试
-    echo -e "${GREEN}2. DNS解析测试:${NC}"
-    local dns_test_domains=("google.com" "github.com" "cloudflare.com")
-    for domain in "${dns_test_domains[@]}"; do
-        if nslookup "$domain" >/dev/null 2>&1; then
-            echo "  ✓ $domain - 解析成功"
-        else
-            echo "  ✗ $domain - 解析失败"
-        fi
-    done
-    echo ""
-
-    # 网络接口状态
-    echo -e "${GREEN}3. 网络接口状态:${NC}"
-    if command -v ip >/dev/null 2>&1; then
-        ip link show | grep -E "(^[0-9]+:|state)" | while read line; do
-            echo "  $line"
-        done
-    elif command -v ifconfig >/dev/null 2>&1; then
-        ifconfig | grep -E "(^[a-z]|inet )" | head -10
-    else
-        echo "  无法获取网络接口信息"
-    fi
-    echo ""
-
-    # 默认网关
-    echo -e "${GREEN}4. 默认网关:${NC}"
-    if command -v ip >/dev/null 2>&1; then
-        ip route show default | head -3
-    elif command -v route >/dev/null 2>&1; then
-        route -n | grep "^0.0.0.0" | head -3
-    else
-        echo "  无法获取网关信息"
-    fi
-
-    echo ""
-    echo -e "${YELLOW}按任意键返回${NC}"
-    read -n1
-}
-
-# 连接监控
-show_connection_monitor() {
-    clear
-    echo -e "${BLUE}${BOLD}连接监控${NC}"
-    echo ""
-
-    local monitor_options=(
-        "活动连接"
-        "监听端口"
-        "网络统计"
-        "实时连接监控"
-        "返回上级菜单"
-    )
-
-    local result
-    result=$(simple_selector "选择监控类型" "${monitor_options[@]}")
-
-    case "$result" in
-        "CANCELLED"|"SELECTOR_ERROR")
-            return
-            ;;
-        0) show_active_connections ;;
-        1) show_listening_ports ;;
-        2) show_network_statistics ;;
-        3) show_realtime_monitor ;;
-        4) return ;;
-    esac
-}
-
-# 活动连接
-show_active_connections() {
-    clear
-    echo -e "${BLUE}${BOLD}活动连接${NC}"
-    echo ""
-
-    if command -v ss >/dev/null 2>&1; then
-        echo -e "${GREEN}TCP连接:${NC}"
-        ss -t -a | head -20
-        echo ""
-        echo -e "${GREEN}UDP连接:${NC}"
-        ss -u -a | head -10
-    elif command -v netstat >/dev/null 2>&1; then
-        echo -e "${GREEN}TCP连接:${NC}"
-        netstat -t -a | head -20
-        echo ""
-        echo -e "${GREEN}UDP连接:${NC}"
-        netstat -u -a | head -10
-    else
-        echo "无法获取连接信息"
-    fi
-
-    echo ""
-    echo -e "${YELLOW}按任意键返回${NC}"
-    read -n1
-}
-
-# 监听端口
-show_listening_ports() {
-    clear
-    echo -e "${BLUE}${BOLD}监听端口${NC}"
-    echo ""
-
-    if command -v ss >/dev/null 2>&1; then
-        echo -e "${GREEN}监听中的端口:${NC}"
-        ss -tuln | column -t
-    elif command -v netstat >/dev/null 2>&1; then
-        echo -e "${GREEN}监听中的端口:${NC}"
-        netstat -tuln | column -t
-    else
-        echo "无法获取端口信息"
-    fi
-
-    echo ""
-    echo -e "${YELLOW}按任意键返回${NC}"
-    read -n1
-}
-
-# DNS工具箱
+# DNS修复工具箱
 show_dns_toolbox() {
     local dns_options=(
         "DNS查询测试"
         "DNS配置管理"
-        "DNS性能测试"
-        "DNS记录查看"
         "返回上级菜单"
     )
 
     while true; do
         local result
-        result=$(simple_selector "DNS工具箱" "${dns_options[@]}")
+        result=$(simple_selector "DNS修复" "${dns_options[@]}")
 
         case "$result" in
             "CANCELLED"|"SELECTOR_ERROR")
@@ -196,9 +56,7 @@ show_dns_toolbox() {
                 ;;
             0) dns_query_test ;;
             1) dns_config_management ;;
-            2) dns_performance_test ;;
-            3) dns_record_lookup ;;
-            4) return ;;
+            2) return ;;
         esac
     done
 }
@@ -210,12 +68,27 @@ dns_query_test() {
     echo ""
 
     echo -e "${CYAN}请输入要查询的域名:${NC}"
-    restore_terminal_state
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
     read -r domain
-    set_raw_terminal
+    if ! set_raw_terminal; then
+        echo -e "${RED}终端模式设置失败${NC}"
+        sleep 2
+        return
+    fi
 
     if [[ -z "$domain" ]]; then
         echo -e "${YELLOW}域名不能为空${NC}"
+        sleep 2
+        return
+    fi
+
+    # 验证域名格式
+    if ! validate_domain "$domain"; then
+        echo -e "${RED}域名格式无效${NC}"
         sleep 2
         return
     fi
@@ -258,10 +131,10 @@ dns_config_management() {
     echo ""
 
     echo -e "${GREEN}当前DNS配置:${NC}"
-    if [[ -f /etc/resolv.conf ]]; then
+    if [[ -f /etc/resolv.conf && -r /etc/resolv.conf ]]; then
         cat /etc/resolv.conf
     else
-        echo "无法读取DNS配置"
+        echo "无法读取DNS配置（文件不存在或无权限）"
     fi
 
     echo ""
@@ -371,32 +244,178 @@ show_performance_test() {
     read -n1
 }
 
-# SSL/TLS检查
-show_ssl_check() {
+# 启用BBR内核网络加速
+enable_bbr_acceleration() {
     clear
-    echo -e "${BLUE}${BOLD}SSL/TLS检查${NC}"
+    echo -e "${BLUE}${BOLD}启用BBR内核网络加速${NC}"
     echo ""
 
-    echo -e "${CYAN}请输入要检查的域名 (如: google.com):${NC}"
-    restore_terminal_state
-    read -r domain
-    set_raw_terminal
+    # 检测系统发行版和版本
+    detect_distro
+    local distro="$DISTRO"
+    local version="$VERSION"
 
-    if [[ -z "$domain" ]]; then
-        echo -e "${YELLOW}域名不能为空${NC}"
+    echo -e "${CYAN}检测到系统: $distro $version${NC}"
+    echo ""
+
+    # 检查当前内核版本
+    local kernel_version=$(uname -r)
+    echo -e "${CYAN}当前内核版本: $kernel_version${NC}"
+    echo ""
+
+    # BBR需要内核4.9+
+    local kernel_major=$(echo "$kernel_version" | cut -d. -f1)
+    local kernel_minor=$(echo "$kernel_version" | cut -d. -f2)
+
+    if [[ $kernel_major -lt 4 ]] || [[ $kernel_major -eq 4 && $kernel_minor -lt 9 ]]; then
+        echo -e "${RED}错误: BBR需要Linux内核4.9或更高版本${NC}"
+        echo -e "${YELLOW}当前内核版本 $kernel_version 不支持BBR${NC}"
+        echo ""
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
+    fi
+
+    # 检查BBR是否已启用
+    local current_congestion=$(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}')
+    if [[ "$current_congestion" == "bbr" ]]; then
+        echo -e "${GREEN}✓ BBR已经启用${NC}"
+        echo ""
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
+    fi
+
+    echo -e "${YELLOW}当前拥塞控制算法: $current_congestion${NC}"
+    echo ""
+    echo -e "${CYAN}是否启用BBR加速? (y/n):${NC}"
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+    read -r confirm
+    if ! set_raw_terminal; then
+        echo -e "${RED}终端模式设置失败${NC}"
         sleep 2
         return
     fi
 
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        return
+    fi
+
     echo ""
-    echo -e "${YELLOW}检查 $domain 的SSL证书...${NC}"
+    echo -e "${YELLOW}正在配置BBR...${NC}"
     echo ""
 
-    if command -v openssl >/dev/null 2>&1; then
-        echo -e "${GREEN}SSL证书信息:${NC}"
-        echo | openssl s_client -servername "$domain" -connect "$domain":443 2>/dev/null | openssl x509 -noout -text 2>/dev/null | grep -E "(Subject:|Issuer:|Not Before|Not After)" || echo "SSL证书检查失败"
+    # 判断配置方法：Debian 11+, Ubuntu 20.04+, CentOS 8+可以快速启用
+    local quick_enable=false
+    case "$distro" in
+        ubuntu)
+            if [[ $(echo "$version" | cut -d. -f1) -ge 20 ]]; then
+                quick_enable=true
+            fi
+            ;;
+        debian)
+            if [[ $(echo "$version" | cut -d. -f1) -ge 11 ]]; then
+                quick_enable=true
+            fi
+            ;;
+        centos|rhel|rocky|almalinux)
+            if [[ $(echo "$version" | cut -d. -f1) -ge 8 ]]; then
+                quick_enable=true
+            fi
+            ;;
+        fedora)
+            quick_enable=true
+            ;;
+        arch|manjaro)
+            quick_enable=true
+            ;;
+        opensuse*|sles)
+            quick_enable=true
+            ;;
+        alpine)
+            quick_enable=true
+            ;;
+    esac
+
+    if [[ "$quick_enable" == "true" ]]; then
+        # 快速启用BBR（支持临时+永久）
+        echo -e "${GREEN}使用快速配置方式...${NC}"
+
+        # 临时启用
+        if sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 && \
+           sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ BBR已临时启用${NC}"
+        else
+            echo -e "${RED}✗ BBR临时启用失败（需要root权限）${NC}"
+            sleep 2
+            return
+        fi
+
+        # 永久配置
+        if [[ -w /etc/sysctl.conf ]]; then
+            # 检查是否已有配置
+            if ! grep -q "net.core.default_qdisc" /etc/sysctl.conf; then
+                echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+            else
+                sed -i 's/^net.core.default_qdisc.*/net.core.default_qdisc=fq/' /etc/sysctl.conf
+            fi
+
+            if ! grep -q "net.ipv4.tcp_congestion_control" /etc/sysctl.conf; then
+                echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+            else
+                sed -i 's/^net.ipv4.tcp_congestion_control.*/net.ipv4.tcp_congestion_control=bbr/' /etc/sysctl.conf
+            fi
+
+            echo -e "${GREEN}✓ BBR配置已写入 /etc/sysctl.conf${NC}"
+        else
+            echo -e "${YELLOW}⚠️ 无法写入 /etc/sysctl.conf（需要root权限）${NC}"
+            echo -e "${YELLOW}   BBR仅临时启用，重启后失效${NC}"
+        fi
     else
-        echo "openssl命令不可用"
+        # 旧版系统需要修改配置文件
+        echo -e "${YELLOW}使用配置文件方式...${NC}"
+
+        local config_file="/etc/sysctl.d/99-bbr.conf"
+
+        if [[ -w /etc/sysctl.d/ ]]; then
+            cat > "$config_file" <<EOF
+# BBR网络加速配置
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+EOF
+            echo -e "${GREEN}✓ 配置已写入 $config_file${NC}"
+
+            # 应用配置
+            if sysctl -p "$config_file" >/dev/null 2>&1; then
+                echo -e "${GREEN}✓ 配置已应用${NC}"
+            else
+                echo -e "${YELLOW}⚠️ 配置应用失败，可能需要重启系统${NC}"
+            fi
+        else
+            echo -e "${RED}✗ 无法写入配置文件（需要root权限）${NC}"
+            sleep 2
+            return
+        fi
+    fi
+
+    echo ""
+    echo -e "${GREEN}BBR配置完成！${NC}"
+    echo ""
+
+    # 验证配置
+    echo -e "${CYAN}当前配置状态:${NC}"
+    echo "  拥塞控制: $(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}')"
+    echo "  队列调度: $(sysctl net.core.default_qdisc 2>/dev/null | awk '{print $3}')"
+
+    # 检查BBR模块
+    if lsmod | grep -q tcp_bbr; then
+        echo -e "${GREEN}  ✓ BBR模块已加载${NC}"
+    else
+        echo -e "${YELLOW}  ⚠️ BBR模块未加载（可能需要重启）${NC}"
     fi
 
     echo ""
@@ -404,29 +423,200 @@ show_ssl_check() {
     read -n1
 }
 
-# 实时连接监控
-show_realtime_monitor() {
+# 流媒体解锁检测
+show_streaming_unlock_check() {
     clear
-    echo -e "${BLUE}${BOLD}实时连接监控${NC}"
+    echo -e "${BLUE}${BOLD}流媒体解锁检测${NC}"
     echo ""
-    echo -e "${YELLOW}监控5秒，按Ctrl+C停止...${NC}"
+    echo -e "${CYAN}此功能将检测当前服务器IP对各流媒体平台的访问解锁情况${NC}"
+    echo -e "${CYAN}包括: Netflix、Disney+、YouTube、Hulu等主流平台${NC}"
+    echo ""
+    echo -e "${YELLOW}注意: 检测过程可能需要几分钟时间${NC}"
+    echo ""
+    echo -n "是否开始检测? [Y/n] "
+    read -r start_check
+
+    if [[ "$start_check" =~ ^[Nn]$ ]]; then
+        return
+    fi
+
+    clear
+    echo -e "${BLUE}${BOLD}流媒体解锁检测${NC}"
+    echo ""
+    echo -e "${CYAN}正在下载检测脚本...${NC}"
     echo ""
 
-    for i in {1..5}; do
-        echo -e "${GREEN}时刻 $i:${NC}"
-        if command -v ss >/dev/null 2>&1; then
-            ss -t | wc -l | xargs echo "  TCP连接数:"
-        elif command -v netstat >/dev/null 2>&1; then
-            netstat -t | wc -l | xargs echo "  TCP连接数:"
+    # 检查依赖
+    if ! command -v curl >/dev/null 2>&1; then
+        echo -e "${RED}错误: 未找到 curl 命令${NC}"
+        echo -e "${YELLOW}请先安装 curl:${NC}"
+        echo "  Ubuntu/Debian: sudo apt install curl"
+        echo "  CentOS/RHEL:   sudo yum install curl"
+        echo ""
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
+    fi
+
+    # 创建临时目录
+    local temp_dir=$(mktemp -d)
+    local script_path="${temp_dir}/region_check.sh"
+
+    # 下载检测脚本
+    if ! curl -fsSL "https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/check.sh" -o "$script_path" 2>/dev/null; then
+        echo -e "${RED}下载检测脚本失败${NC}"
+        echo -e "${YELLOW}请检查网络连接或稍后重试${NC}"
+        rm -rf "$temp_dir"
+        echo ""
+        echo -e "${YELLOW}按任意键返回${NC}"
+        read -n1
+        return
+    fi
+
+    # 设置执行权限
+    chmod +x "$script_path"
+
+    echo -e "${GREEN}下载完成，开始检测...${NC}"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # 执行检测脚本
+    bash "$script_path"
+
+    local exit_code=$?
+
+    # 清理临时文件
+    rm -rf "$temp_dir"
+
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    if [[ $exit_code -eq 0 ]]; then
+        echo -e "${GREEN}检测完成！${NC}"
+    else
+        echo -e "${YELLOW}检测完成（部分项可能失败）${NC}"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}按 Enter 键返回网络工具菜单...${NC}"
+    read -r
+
+    # 返回时清屏重新显示菜单
+    return
+}
+
+# 回程路由检测
+show_backtrace_check() {
+    clear
+    echo -e "${BLUE}${BOLD}回程路由检测${NC}"
+    echo ""
+    echo -e "${CYAN}此功能将检测服务器到国内三大运营商的回程路由线路${NC}"
+    echo -e "${CYAN}包括: 电信、联通、移动的回程路由路径和线路类型${NC}"
+    echo ""
+    echo -e "${YELLOW}注意: 检测过程可能需要几分钟时间${NC}"
+    echo ""
+    echo -n "是否开始检测? [Y/n] "
+    read -r start_check
+
+    if [[ "$start_check" =~ ^[Nn]$ ]]; then
+        return
+    fi
+
+    clear
+    echo -e "${BLUE}${BOLD}回程路由检测${NC}"
+    echo ""
+
+    # 检查是否已安装backtrace工具
+    if command -v backtrace >/dev/null 2>&1; then
+        echo -e "${GREEN}检测到已安装 backtrace 工具${NC}"
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+
+        # 直接运行backtrace
+        backtrace
+
+        local exit_code=$?
+
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+
+        if [[ $exit_code -eq 0 ]]; then
+            echo -e "${GREEN}检测完成！${NC}"
         else
-            echo "  无法获取连接数"
+            echo -e "${YELLOW}检测完成（部分项可能失败）${NC}"
         fi
-        sleep 1
-    done
+    else
+        echo -e "${CYAN}正在下载并安装 backtrace 工具...${NC}"
+        echo ""
+
+        # 检查依赖
+        if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+            echo -e "${RED}错误: 未找到 curl 或 wget 命令${NC}"
+            echo -e "${YELLOW}请先安装其中之一:${NC}"
+            echo "  Ubuntu/Debian: sudo apt install curl"
+            echo "  CentOS/RHEL:   sudo yum install curl"
+            echo ""
+            echo -e "${YELLOW}按任意键返回${NC}"
+            read -n1
+            return
+        fi
+
+        # 下载并安装backtrace
+        echo -e "${CYAN}正在执行安装脚本...${NC}"
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+
+        if curl -fsSL "https://raw.githubusercontent.com/oneclickvirt/backtrace/main/backtrace_install.sh" 2>/dev/null | bash; then
+            echo ""
+            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo -e "${GREEN}安装完成，开始检测...${NC}"
+            echo ""
+            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+
+            # 运行backtrace检测
+            if command -v backtrace >/dev/null 2>&1; then
+                backtrace
+                local exit_code=$?
+
+                echo ""
+                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+
+                if [[ $exit_code -eq 0 ]]; then
+                    echo -e "${GREEN}检测完成！${NC}"
+                else
+                    echo -e "${YELLOW}检测完成（部分项可能失败）${NC}"
+                fi
+            else
+                echo ""
+                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+                echo -e "${RED}安装失败，无法运行 backtrace 命令${NC}"
+            fi
+        else
+            echo ""
+            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo -e "${RED}下载或安装脚本失败${NC}"
+            echo -e "${YELLOW}请检查网络连接或稍后重试${NC}"
+        fi
+    fi
 
     echo ""
-    echo -e "${YELLOW}监控完成，按任意键返回${NC}"
-    read -n1
+    echo -e "${CYAN}提示: backtrace 工具已安装到系统，下次检测将直接运行${NC}"
+    echo ""
+    echo -e "${YELLOW}按 Enter 键返回网络工具菜单...${NC}"
+    read -r
+
+    # 返回时清屏重新显示菜单
+    return
 }
 
 # 模块信息

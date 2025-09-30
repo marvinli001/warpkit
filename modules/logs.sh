@@ -216,12 +216,27 @@ show_log_search() {
     echo ""
 
     echo -e "${CYAN}请输入搜索关键词:${NC}"
-    restore_terminal_state
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
     read -r search_term
-    set_raw_terminal
+    if ! set_raw_terminal; then
+        echo -e "${RED}终端模式设置失败${NC}"
+        sleep 2
+        return
+    fi
 
     if [[ -z "$search_term" ]]; then
         echo -e "${YELLOW}搜索词不能为空${NC}"
+        sleep 2
+        return
+    fi
+
+    # 验证输入安全性（基本验证，防止命令注入）
+    if [[ "$search_term" =~ [\;\&\|\`\$\(\)] ]]; then
+        echo -e "${RED}输入包含非法字符${NC}"
         sleep 2
         return
     fi
@@ -459,9 +474,17 @@ show_custom_logs() {
     echo ""
 
     echo -e "${CYAN}请输入日志文件路径:${NC}"
-    restore_terminal_state
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
     read -r log_path
-    set_raw_terminal
+    if ! set_raw_terminal; then
+        echo -e "${RED}终端模式设置失败${NC}"
+        sleep 2
+        return
+    fi
 
     if [[ -z "$log_path" ]]; then
         echo -e "${YELLOW}路径不能为空${NC}"
@@ -469,8 +492,21 @@ show_custom_logs() {
         return
     fi
 
+    # 验证文件路径安全性
+    if ! validate_file_path "$log_path"; then
+        echo -e "${RED}文件路径无效或不安全${NC}"
+        sleep 2
+        return
+    fi
+
     if [[ ! -f "$log_path" ]]; then
         echo -e "${RED}文件不存在: $log_path${NC}"
+        sleep 2
+        return
+    fi
+
+    if [[ ! -r "$log_path" ]]; then
+        echo -e "${RED}无权限读取文件: $log_path${NC}"
         sleep 2
         return
     fi

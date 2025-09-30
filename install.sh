@@ -155,9 +155,15 @@ install_warpkit() {
         chmod +x "$LIB_DIR/modules/"*.sh
     fi
 
-    # 清理临时文件（仅远程安装）
-    if [[ "$INSTALL_MODE" == "remote" ]] && [[ "$SCRIPT_DIR" == "/tmp/warpkit_install_"* ]]; then
-        rm -rf "$SCRIPT_DIR"
+    # 清理临时文件（仅远程安装，带安全检查）
+    if [[ "$INSTALL_MODE" == "remote" ]]; then
+        # 严格检查路径安全性
+        if [[ "$SCRIPT_DIR" == "/tmp/warpkit_install_"* ]] && \
+           [[ -d "$SCRIPT_DIR" ]] && \
+           [[ "$SCRIPT_DIR" != "/" ]] && \
+           [[ "$SCRIPT_DIR" != "/tmp" ]]; then
+            rm -rf "$SCRIPT_DIR"
+        fi
     fi
 
     echo -e "${GREEN}${BOLD}WarpKit安装完成！${NC}"
