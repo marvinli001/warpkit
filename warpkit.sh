@@ -298,7 +298,7 @@ update_modules() {
     mkdir -p "$temp_modules_dir"
 
     # 下载模块文件
-    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh" "streaming_check.sh" "backtrace_check.sh")
+    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh" "docker.sh" "streaming_check.sh" "backtrace_check.sh")
     local download_success=true
 
     for module in "${modules[@]}"; do
@@ -1049,6 +1049,17 @@ handle_modular_menu_item() {
                 return 0
             fi
             ;;
+        "Docker管理")
+            debug_log "handle_modular_menu_item: 调用Docker管理模块"
+            if call_module_function "docker" "show_docker_manager"; then
+                debug_log "handle_modular_menu_item: Docker管理模块调用成功"
+                return 0
+            else
+                debug_log "handle_modular_menu_item: Docker管理模块调用失败，使用内置版本"
+                show_docker_manager_builtin
+                return 0
+            fi
+            ;;
         "日志查看")
             debug_log "handle_modular_menu_item: 调用日志查看模块"
             if call_module_function "logs" "show_log_viewer"; then
@@ -1073,6 +1084,7 @@ show_main_menu() {
         "系统工具"
         "包管理"
         "网络工具"
+        "Docker管理"
         "日志查看"
         "脚本管理"
         "退出"
@@ -1124,11 +1136,12 @@ show_text_menu() {
         echo "1. 系统工具"
         echo "2. 包管理"
         echo "3. 网络工具"
-        echo "4. 日志查看"
-        echo "5. 脚本管理"
+        echo "4. Docker管理"
+        echo "5. 日志查看"
+        echo "6. 脚本管理"
         echo "0. 退出"
         echo ""
-        echo -n "请选择功能 (0-5): "
+        echo -n "请选择功能 (0-6): "
 
         read -r choice
         echo ""
@@ -1154,12 +1167,16 @@ show_text_menu() {
                 CURRENT_SELECTION=4
                 handle_menu_selection
                 ;;
+            6)
+                CURRENT_SELECTION=5
+                handle_menu_selection
+                ;;
             0)
                 echo -e "${YELLOW}再见！${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}无效选择，请输入 0-5${NC}"
+                echo -e "${RED}无效选择，请输入 0-6${NC}"
                 sleep 2
                 ;;
         esac
@@ -1567,6 +1584,32 @@ show_log_viewer_builtin() {
     else
         echo "系统日志: 不可用"
     fi
+    echo ""
+    echo "按任意键返回主菜单"
+    read -n1
+}
+
+# Docker 管理 (内置简化版)
+show_docker_manager_builtin() {
+    clear
+    echo -e "${BLUE}${BOLD}Docker 管理${NC}"
+    echo ""
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${RED}Docker 未安装${NC}"
+        echo ""
+        echo "安装 Docker 请访问: https://docs.docker.com/engine/install/"
+    else
+        echo -e "${GREEN}Docker 已安装${NC}"
+        echo ""
+        echo -e "${CYAN}Docker 版本:${NC}"
+        docker --version 2>/dev/null || echo "无法获取版本"
+        echo ""
+        echo -e "${CYAN}运行中的容器:${NC}"
+        docker ps --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | head -6 || echo "无法获取容器列表"
+    fi
+    echo ""
+    echo "提示: 完整的 Docker 管理功能请使用模块版本"
     echo ""
     echo "按任意键返回主菜单"
     read -n1
