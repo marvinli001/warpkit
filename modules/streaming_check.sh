@@ -5481,17 +5481,11 @@ function showScriptTitle() {
     if [ "$LANGUAGE" == 'en' ]; then
         echo -e " [Stream Platform & Game Region Restriction Test]"
         echo ''
-        echo -e "${Font_Green}Github Repository:${Font_Suffix} ${Font_Yellow} https://github.com/lmc999/RegionRestrictionCheck ${Font_Suffix}"
-        echo -e "${Font_Green}Telegram Discussion Group:${Font_Suffix} ${Font_Yellow} https://t.me/gameaccelerate ${Font_Suffix}"
-        echo ''
         echo -e " ** Test Starts At: $(date)"
         echo -e " ** Version: ${VER}"
         echo ''
     else
         echo -e " [流媒体平台及游戏区域限制测试]"
-        echo ''
-        echo -e "${Font_Green}项目地址${Font_Suffix} ${Font_Yellow}https://github.com/lmc999/RegionRestrictionCheck ${Font_Suffix}"
-        echo -e "${Font_Green}BUG 反馈或使用交流可加 TG 群组${Font_Suffix} ${Font_Yellow}https://t.me/gameaccelerate ${Font_Suffix}"
         echo ''
         echo -e " ** 测试时间: $(date)"
         echo -e " ** 版本: ${VER}"
