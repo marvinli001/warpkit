@@ -1336,19 +1336,178 @@ show_docker_settings() {
 
 # 安装 Docker
 install_docker() {
-    echo "Docker 安装 - 待实现"
+    clear
+    echo -e "${CYAN}${BOLD}安装 Docker${NC}"
+    echo ""
+
+    echo -e "${YELLOW}检测系统类型...${NC}"
+
+    # 检测系统类型
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        OS=$ID
+    else
+        echo -e "${RED}无法检测操作系统类型${NC}"
+        read -p "按 Enter 继续..."
+        return 1
+    fi
+
+    echo -e "${GREEN}检测到系统: $OS${NC}"
+    echo ""
+    echo -e "${YELLOW}准备安装 Docker...${NC}"
+    echo ""
+
+    case "$OS" in
+        ubuntu|debian)
+            echo "使用官方脚本安装 Docker (Ubuntu/Debian)"
+            echo ""
+
+            # 使用官方便捷脚本
+            if command -v curl >/dev/null 2>&1; then
+                curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+                if [[ $? -eq 0 ]]; then
+                    echo -e "${YELLOW}开始安装...${NC}"
+                    sudo sh /tmp/get-docker.sh
+                    rm /tmp/get-docker.sh
+                else
+                    echo -e "${RED}下载安装脚本失败${NC}"
+                    read -p "按 Enter 继续..."
+                    return 1
+                fi
+            else
+                echo -e "${RED}需要 curl 命令${NC}"
+                read -p "按 Enter 继续..."
+                return 1
+            fi
+            ;;
+        centos|rhel|fedora)
+            echo "使用官方脚本安装 Docker (CentOS/RHEL/Fedora)"
+            echo ""
+
+            if command -v curl >/dev/null 2>&1; then
+                curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+                if [[ $? -eq 0 ]]; then
+                    echo -e "${YELLOW}开始安装...${NC}"
+                    sudo sh /tmp/get-docker.sh
+                    rm /tmp/get-docker.sh
+                else
+                    echo -e "${RED}下载安装脚本失败${NC}"
+                    read -p "按 Enter 继续..."
+                    return 1
+                fi
+            else
+                echo -e "${RED}需要 curl 命令${NC}"
+                read -p "按 Enter 继续..."
+                return 1
+            fi
+            ;;
+        *)
+            echo -e "${YELLOW}系统: $OS${NC}"
+            echo ""
+            echo "推荐使用官方安装方法:"
+            echo "https://docs.docker.com/engine/install/"
+            echo ""
+            read -p "按 Enter 继续..."
+            return 1
+            ;;
+    esac
+
+    echo ""
+    echo -e "${GREEN}Docker 安装完成！${NC}"
+    echo ""
+
+    # 启动 Docker 服务
+    echo -e "${YELLOW}启动 Docker 服务...${NC}"
+    sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null
+
+    # 设置开机自启
+    echo -e "${YELLOW}设置 Docker 开机自启...${NC}"
+    sudo systemctl enable docker 2>/dev/null || true
+
+    echo ""
+    echo -e "${GREEN}✓ Docker 已成功安装并启动${NC}"
+    echo ""
+    echo -e "${CYAN}提示: 如需非 root 用户运行 Docker，请执行:${NC}"
+    echo "  sudo usermod -aG docker \$USER"
+    echo "  (需要重新登录才能生效)"
+    echo ""
+
     read -p "按 Enter 继续..."
 }
 
 # 卸载 Docker
 uninstall_docker() {
-    echo "Docker 卸载 - 待实现"
+    clear
+    echo -e "${RED}${BOLD}卸载 Docker${NC}"
+    echo ""
+    echo -e "${YELLOW}警告: 这将删除 Docker 及所有容器、镜像、卷等数据！${NC}"
+    echo ""
+    echo -n "确认卸载? [y/N]: "
+    read -r confirm
+
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "已取消"
+        sleep 1
+        return
+    fi
+
+    echo ""
+    echo -e "${YELLOW}正在卸载 Docker...${NC}"
+
+    # 停止 Docker 服务
+    sudo systemctl stop docker 2>/dev/null || sudo service docker stop 2>/dev/null
+
+    # 检测系统类型并卸载
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        OS=$ID
+
+        case "$OS" in
+            ubuntu|debian)
+                sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                sudo apt-get autoremove -y
+                ;;
+            centos|rhel|fedora)
+                sudo yum remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+        esac
+    fi
+
+    # 删除数据目录
+    echo -n "是否删除所有 Docker 数据? [y/N]: "
+    read -r delete_data
+
+    if [[ "$delete_data" =~ ^[Yy]$ ]]; then
+        sudo rm -rf /var/lib/docker
+        sudo rm -rf /var/lib/containerd
+        echo -e "${GREEN}数据已删除${NC}"
+    fi
+
+    echo ""
+    echo -e "${GREEN}Docker 卸载完成${NC}"
     read -p "按 Enter 继续..."
 }
 
 # 启动 Docker 服务
 start_docker_service() {
-    echo "启动 Docker 服务 - 待实现"
+    clear
+    echo -e "${CYAN}${BOLD}启动 Docker 服务${NC}"
+    echo ""
+
+    echo -e "${YELLOW}正在启动 Docker...${NC}"
+
+    if sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null; then
+        echo -e "${GREEN}✓ Docker 服务已启动${NC}"
+
+        # 设置开机自启
+        if sudo systemctl enable docker 2>/dev/null; then
+            echo -e "${GREEN}✓ 已设置开机自启${NC}"
+        fi
+    else
+        echo -e "${RED}✗ 启动失败${NC}"
+    fi
+
+    echo ""
     read -p "按 Enter 继续..."
 }
 
