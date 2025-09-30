@@ -148,7 +148,7 @@ shead[title]="IP QUALITY CHECK REPORT: "
 shead[title_lite]="IP QUALITY CHECK REPORT(LITE): "
 shead[ver]="Version: $script_version"
 shead[bash]="bash <(curl -sL https://Check.Place) -EI"
-shead[git]="https://github.com/xykt/IPQuality"
+shead[git]="https://github.com/marvinli001/warpkit"
 shead[time]=$(date -u +"Report Time: %Y-%m-%d %H:%M:%S UTC")
 shead[ltitle]=25
 shead[ltitle_lite]=31
@@ -272,7 +272,7 @@ shead[title]="IP质量体检报告："
 shead[title_lite]="IP质量体检报告(Lite)："
 shead[ver]="脚本版本：$script_version"
 shead[bash]="bash <(curl -sL https://Check.Place) -I"
-shead[git]="https://github.com/xykt/IPQuality"
+shead[git]="https://github.com/marvinli001/warpkit"
 shead[time]=$(TZ="Asia/Shanghai" date +"报告时间：%Y-%m-%d %H:%M:%S CST")
 shead[ltitle]=16
 shead[ltitle_lite]=22
@@ -515,15 +515,17 @@ local ifunicode=$(printf '\u2800')
 [[ ${#ifunicode} -gt 3 ]]&&export LC_CTYPE=en_US.UTF-8 2>/dev/null
 }
 check_connectivity(){
+# Modified for WarpKit: Use marvinli001/warpkit repository instead of xykt/IPQuality
+# This removes advertisement dependencies from the original repository
 local url="https://www.google.com/generate_204"
 local timeout=2
 local http_code
 http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout "$timeout" "$url" 2>/dev/null)
 if [[ $http_code == "204" ]];then
-rawgithub="https://github.com/xykt/IPQuality/raw/"
+rawgithub="https://raw.githubusercontent.com/marvinli001/warpkit/master/"
 return 0
 else
-rawgithub="https://testingcf.jsdelivr.net/gh/xykt/IPQuality@"
+rawgithub="https://cdn.jsdelivr.net/gh/marvinli001/warpkit@master/"
 return 1
 fi
 }
@@ -796,7 +798,7 @@ ipinfo[proxy]=$(echo "$RESPONSE"|jq -r '.data.privacy.proxy')
 ipinfo[tor]=$(echo "$RESPONSE"|jq -r '.data.privacy.tor')
 ipinfo[vpn]=$(echo "$RESPONSE"|jq -r '.data.privacy.vpn')
 ipinfo[server]=$(echo "$RESPONSE"|jq -r '.data.privacy.hosting')
-local ISO3166=$(curl -sL -m 10 "${rawgithub}main/ref/iso3166.json")
+local ISO3166=$(curl -sL -m 10 "${rawgithub}ref/iso3166.json")
 ipinfo[asn]=$(echo "$RESPONSE"|jq -r '.data.asn.asn'|sed 's/^AS//')
 ipinfo[org]=$(echo "$RESPONSE"|jq -r '.data.asn.name')
 ipinfo[city]=$(echo "$RESPONSE"|jq -r '.data.city')
@@ -1749,7 +1751,7 @@ local total=0
 local clean=0
 local blacklisted=0
 local other=0
-curl $CurlARG -sL "${rawgithub}main/ref/dnsbl.list"|sort -u|xargs -P "$parallel_jobs" -I {} bash -c "result=\$(dig +short \"$reversed_ip.{}\" A); if [[ -z \"\$result\" ]]; then echo 'Clean'; elif [[ \"\$result\" == '127.0.0.2' ]]; then echo 'Blacklisted'; else echo 'Other'; fi"|{
+curl $CurlARG -sL "${rawgithub}ref/dnsbl.list"|sort -u|xargs -P "$parallel_jobs" -I {} bash -c "result=\$(dig +short \"$reversed_ip.{}\" A); if [[ -z \"\$result\" ]]; then echo 'Clean'; elif [[ \"\$result\" == '127.0.0.2' ]]; then echo 'Blacklisted'; else echo 'Other'; fi"|{
 while IFS= read -r line;do
 ((total++))
 case "$line" in
@@ -2221,8 +2223,9 @@ show_ad(){
 ADLines=0
 }
 read_ref(){
-Media_Cookie=$(curl $CurlARG -sL --retry 3 --max-time 10 "${rawgithub}main/ref/cookies.txt")
-IATA_Database="${rawgithub}main/ref/iata-icao.csv"
+# Modified for WarpKit: Load from our repository's ref directory
+Media_Cookie=$(curl $CurlARG -sL --retry 3 --max-time 10 "${rawgithub}ref/cookies.txt")
+IATA_Database="${rawgithub}ref/iata-icao.csv"
 }
 clean_ansi(){
 local input="$1"
