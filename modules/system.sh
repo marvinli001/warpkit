@@ -47,7 +47,10 @@ show_system_monitor() {
 show_system_monitor_text_menu() {
     while true; do
         clear
-        echo -e "${BLUE}${BOLD}系统工具${NC}"
+        print_logo
+        show_system_info
+
+        echo -e "${CYAN}${BOLD}系统工具${NC}"
         echo ""
         echo "1. 实时系统状态"
         echo "2. 进程管理"
@@ -55,9 +58,9 @@ show_system_monitor_text_menu() {
         echo "4. 系统负载历史"
         echo "5. 软件源管理"
         echo "6. SWAP内存管理"
-        echo "7. 返回主菜单"
+        echo "0. 返回主菜单"
         echo ""
-        echo -n "请选择功能 (1-7): "
+        echo -n "请选择功能 (0-6): "
 
         read -r choice
         echo ""
@@ -69,9 +72,9 @@ show_system_monitor_text_menu() {
             4) show_load_history ;;
             5) show_mirror_manager ;;
             6) show_swap_manager ;;
-            7) return ;;
+            0) return ;;
             *)
-                echo -e "${RED}无效选择，请输入 1-7${NC}"
+                echo -e "${RED}无效选择，请输入 0-6${NC}"
                 sleep 2
                 ;;
         esac

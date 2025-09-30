@@ -47,7 +47,10 @@ show_log_viewer() {
 show_log_viewer_text_menu() {
     while true; do
         clear
-        echo -e "${BLUE}${BOLD}日志查看${NC}"
+        print_logo
+        show_system_info
+
+        echo -e "${CYAN}${BOLD}日志查看${NC}"
         echo ""
         echo "1. 系统日志分析"
         echo "2. 应用日志查看"
@@ -55,9 +58,9 @@ show_log_viewer_text_menu() {
         echo "4. 实时日志监控"
         echo "5. 日志统计"
         echo "6. 日志清理"
-        echo "7. 返回主菜单"
+        echo "0. 返回主菜单"
         echo ""
-        echo -n "请选择功能 (1-7): "
+        echo -n "请选择功能 (0-6): "
 
         read -r choice
         echo ""
@@ -69,9 +72,9 @@ show_log_viewer_text_menu() {
             4) show_realtime_monitor ;;
             5) show_log_statistics ;;
             6) show_log_cleanup ;;
-            7) return ;;
+            0) return ;;
             *)
-                echo -e "${RED}无效选择，请输入 1-7${NC}"
+                echo -e "${RED}无效选择，请输入 0-6${NC}"
                 sleep 2
                 ;;
         esac
