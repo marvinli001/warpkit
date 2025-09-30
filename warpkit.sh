@@ -936,17 +936,14 @@ load_module() {
     # 加载模块
     debug_log "加载模块: $module_name (文件: $module_file)"
 
-    # 尝试加载模块，捕获错误信息
-    local load_error
-    if load_error=$(source "$module_file" 2>&1); then
+    # 尝试加载模块
+    if source "$module_file" 2>/dev/null; then
         LOADED_MODULES+=("$module_name")
         debug_log "模块 $module_name 加载成功"
         return 0
     else
-        debug_log "模块 $module_name 加载失败: $load_error"
-        # 即使有错误也尝试继续（某些模块可能有非致命错误）
-        LOADED_MODULES+=("$module_name")
-        return 0
+        debug_log "模块 $module_name 加载失败"
+        return 1
     fi
 }
 
