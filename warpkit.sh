@@ -1016,37 +1016,55 @@ call_module_function() {
 # 模块化的菜单项处理
 handle_modular_menu_item() {
     local item="$1"
+    debug_log "handle_modular_menu_item: 处理菜单项 '$item'"
 
     case "$item" in
         "系统工具")
+            debug_log "handle_modular_menu_item: 调用系统工具模块"
             if call_module_function "system" "show_system_monitor"; then
+                debug_log "handle_modular_menu_item: 系统工具模块调用成功"
                 return 0
             else
+                debug_log "handle_modular_menu_item: 系统工具模块调用失败，使用内置版本"
                 show_system_monitor_builtin
+                return 0
             fi
             ;;
         "包管理")
+            debug_log "handle_modular_menu_item: 调用包管理模块"
             if call_module_function "packages" "show_package_management"; then
+                debug_log "handle_modular_menu_item: 包管理模块调用成功"
                 return 0
             else
+                debug_log "handle_modular_menu_item: 包管理模块调用失败，使用内置版本"
                 show_package_management_builtin
+                return 0
             fi
             ;;
         "网络工具")
+            debug_log "handle_modular_menu_item: 调用网络工具模块"
             if call_module_function "network" "show_network_tools"; then
+                debug_log "handle_modular_menu_item: 网络工具模块调用成功"
                 return 0
             else
+                debug_log "handle_modular_menu_item: 网络工具模块调用失败，使用内置版本"
                 show_network_tools_builtin
+                return 0
             fi
             ;;
         "日志查看")
+            debug_log "handle_modular_menu_item: 调用日志查看模块"
             if call_module_function "logs" "show_log_viewer"; then
+                debug_log "handle_modular_menu_item: 日志查看模块调用成功"
                 return 0
             else
+                debug_log "handle_modular_menu_item: 日志查看模块调用失败，使用内置版本"
                 show_log_viewer_builtin
+                return 0
             fi
             ;;
         *)
+            debug_log "handle_modular_menu_item: 未知菜单项 '$item'"
             return 1
             ;;
     esac
