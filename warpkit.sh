@@ -874,6 +874,14 @@ init_module_system() {
         return 1
     fi
 
+    # 导出必要的函数供模块使用
+    export -f debug_log
+    export -f codex_selector
+    export -f simple_selector
+
+    # 导出颜色变量
+    export RED GREEN YELLOW BLUE PURPLE CYAN WHITE BOLD NC
+
     # 扫描可用模块
     scan_available_modules
     return 0
