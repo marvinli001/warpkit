@@ -106,7 +106,7 @@ download_warpkit_files() {
 
     # 下载模块
     echo -e "${CYAN}下载功能模块...${NC}"
-    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh")
+    local modules=("system.sh" "packages.sh" "network.sh" "logs.sh" "streaming_check.sh" "backtrace_check.sh")
     for module in "${modules[@]}"; do
         echo -e "${CYAN}  下载 $module...${NC}"
         if ! download_file "$GITHUB_RAW_URL/modules/$module" "$temp_dir/modules/$module"; then
@@ -279,9 +279,9 @@ post_install_info() {
     echo ""
 
     echo -e "${GREEN}主要功能:${NC}"
-    echo "  - 系统监控 (实时状态、进程管理、内存分析)"
+    echo "  - 系统工具 (实时状态、软件源管理、SWAP管理)"
     echo "  - 包管理 (智能搜索、依赖分析、安全检查)"
-    echo "  - 网络工具 (诊断、SSL检查、防火墙管理)"
+    echo "  - 网络工具 (诊断、流媒体检测、回程路由检测)"
     echo "  - 日志分析 (实时监控、搜索、统计)"
     echo ""
 
