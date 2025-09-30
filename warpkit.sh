@@ -193,6 +193,10 @@ check_for_updates() {
     else
         if [[ "$force_check" == "true" ]]; then
             echo -e "${GREEN}✅ 已是最新版本 $current_commit${NC}" >&2
+
+            # 即使主程序是最新版本，也检查并更新模块
+            echo -e "${BLUE}🔍 检查模块更新...${NC}" >&2
+            update_modules_from_new_version
         fi
     fi
 
