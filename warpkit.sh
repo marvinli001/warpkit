@@ -456,6 +456,15 @@ show_system_info() {
     echo -e "  发行版: ${GREEN}$DISTRO $VERSION${NC}"
     echo -e "  内核版本: ${GREEN}$KERNEL${NC}"
     echo -e "  架构: ${GREEN}$ARCH${NC}"
+
+    # 调试模式下显示模块状态
+    if [[ "$DEBUG_MODE" == "true" ]]; then
+        if [[ -n "$WARPKIT_MODULES_DIR" && -d "$WARPKIT_MODULES_DIR" ]]; then
+            echo -e "  模块: ${GREEN}✓ 已加载 (${#LOADED_MODULES[@]}个)${NC}"
+        else
+            echo -e "  模块: ${YELLOW}✗ 未加载 (使用内置功能)${NC}"
+        fi
+    fi
     echo ""
 }
 
@@ -1224,7 +1233,8 @@ enter_alternate_screen() {
 # 调试输出
 debug_log() {
     if [[ "$DEBUG_MODE" == "true" ]]; then
-        echo "[DEBUG] $*" >&2
+        local log_file="/tmp/warpkit_debug.log"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] $*" | tee -a "$log_file" >&2
     fi
 }
 
@@ -1896,7 +1906,18 @@ main() {
     detect_distro
 
     # 初始化模块系统
-    init_module_system && debug_log "模块系统初始化成功" || debug_log "模块系统初始化失败，使用内置功能"
+    if init_module_system; then
+        debug_log "模块系统初始化成功"
+        debug_log "模块目录: $WARPKIT_MODULES_DIR"
+        debug_log "可用模块: ${AVAILABLE_MODULES[*]}"
+    else
+        debug_log "模块系统初始化失败，使用内置功能"
+        if [[ "$DEBUG_MODE" == "true" ]]; then
+            echo -e "${YELLOW}警告: 模块系统初始化失败，将使用简化功能${NC}" >&2
+            echo -e "${YELLOW}查看详情: cat /tmp/warpkit_debug.log${NC}" >&2
+            sleep 2
+        fi
+    fi
 
     # 设置退出时恢复终端
     trap 'restore_terminal_state; exit' EXIT INT TERM
