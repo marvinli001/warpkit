@@ -313,6 +313,58 @@ bash install.sh
 - BBR内核加速
 - DNS修复和防火墙管理
 
+## 故障排除
+
+### 模块功能无法加载
+
+如果菜单选项没有显示完整功能（比如网络工具只显示简单网络状态），可能是模块加载问题。
+
+**启用调试模式查看详情**：
+```bash
+# 临时启用调试模式
+WARPKIT_DEBUG=true warpkit
+
+# 或导出环境变量
+export WARPKIT_DEBUG=true
+warpkit
+```
+
+**手动更新所有文件**：
+```bash
+# 使用内置更新功能（推荐）
+warpkit --update
+
+# 或重新安装
+curl -fsSL https://raw.githubusercontent.com/marvinli001/warpkit/master/install.sh | bash
+```
+
+**检查模块文件**：
+```bash
+# 检查模块目录
+ls -la /usr/local/lib/warpkit/modules/
+# 或
+ls -la ~/.local/lib/warpkit/modules/
+
+# 确保模块文件有执行权限
+chmod +x /usr/local/lib/warpkit/modules/*.sh
+```
+
+### 更新后功能不可用
+
+更新功能会自动更新主程序和所有模块文件。如果更新后功能仍不可用：
+
+1. 检查是否有多个安装位置
+2. 清除旧的安装
+3. 重新执行安装脚本
+
+```bash
+# 查找所有warpkit安装
+which -a warpkit
+
+# 重新安装
+curl -fsSL https://raw.githubusercontent.com/marvinli001/warpkit/master/install.sh | bash
+```
+
 ## 问题反馈
 
 如果你发现了 bug 或有功能建议，请通过以下方式反馈：
