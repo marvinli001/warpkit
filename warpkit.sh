@@ -1467,6 +1467,7 @@ handle_menu_selection() {
         "系统工具"
         "包管理"
         "网络工具"
+        "Docker管理"
         "日志查看"
         "脚本管理"
         "退出"
@@ -1495,6 +1496,9 @@ handle_menu_selection() {
                         ;;
                     "网络工具")
                         show_network_tools_builtin
+                        ;;
+                    "Docker管理")
+                        show_docker_manager_builtin
                         ;;
                     "日志查看")
                         show_log_viewer_builtin
@@ -1649,18 +1653,34 @@ show_help() {
     echo -e "${YELLOW}用法:${NC}"
     echo "  warpkit [选项]"
     echo ""
-    echo -e "${YELLOW}选项:${NC}"
+    echo -e "${YELLOW}通用选项:${NC}"
     echo "  -h, --help        显示此帮助信息"
     echo "  -v, --version     显示版本信息"
     echo "  -u, --update      检查并更新到最新版本"
-    echo "  --config          指定配置文件路径"
-    echo "  --theme           设置主题 (default, dark, light)"
-    echo "  --lang            设置语言 (zh_CN, en_US)"
+    echo "  --debug           启用调试模式"
+    echo ""
+    echo -e "${YELLOW}功能模块快捷访问:${NC}"
+    echo "  --system          进入系统工具模块"
+    echo "  --packages        进入包管理模块"
+    echo "  --network         进入网络工具模块"
+    echo "  --docker          进入 Docker 管理模块"
+    echo "  --logs            进入日志查看模块"
+    echo "  --scripts         进入脚本管理模块"
+    echo ""
+    echo -e "${YELLOW}高级选项:${NC}"
+    echo "  --config <path>   指定配置文件路径"
+    echo "  --theme <name>    设置主题 (default, dark, light)"
+    echo "  --lang <code>     设置语言 (zh_CN, en_US)"
     echo ""
     echo -e "${YELLOW}示例:${NC}"
-    echo "  warpkit           # 启动交互式界面"
-    echo "  warpkit --update  # 检查更新"
-    echo "  warpkit --version # 显示版本"
+    echo "  warpkit                # 启动交互式主菜单"
+    echo "  warpkit --docker       # 直接进入 Docker 管理"
+    echo "  warpkit --system       # 直接进入系统工具"
+    echo "  warpkit --update       # 检查并更新到最新版本"
+    echo "  warpkit --version      # 显示当前版本信息"
+    echo "  warpkit --debug        # 以调试模式启动"
+    echo ""
+    echo -e "${CYAN}完整文档: https://github.com/marvinli001/warpkit${NC}"
     echo ""
 }
 
@@ -1683,6 +1703,41 @@ parse_arguments() {
                 ;;
             -u|--update)
                 check_for_updates true
+                exit 0
+                ;;
+            --system)
+                # 直接进入系统工具模块
+                init_module_system
+                call_module_function "system" "show_system_monitor" || show_system_tools_builtin
+                exit 0
+                ;;
+            --packages)
+                # 直接进入包管理模块
+                init_module_system
+                call_module_function "packages" "show_package_management" || show_package_management_builtin
+                exit 0
+                ;;
+            --network)
+                # 直接进入网络工具模块
+                init_module_system
+                call_module_function "network" "show_network_tools" || show_network_tools_builtin
+                exit 0
+                ;;
+            --docker)
+                # 直接进入 Docker 管理模块
+                init_module_system
+                call_module_function "docker" "show_docker_manager" || show_docker_manager_builtin
+                exit 0
+                ;;
+            --logs)
+                # 直接进入日志查看模块
+                init_module_system
+                call_module_function "logs" "show_log_viewer" || show_log_viewer_builtin
+                exit 0
+                ;;
+            --scripts)
+                # 直接进入脚本管理模块
+                show_script_management
                 exit 0
                 ;;
             --config)

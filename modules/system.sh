@@ -578,7 +578,12 @@ show_swap_manager() {
         result=$(codex_selector "SWAP内存管理" "管理系统交换空间" 0 "${swap_options[@]}")
 
         case "$result" in
-            "CANCELLED"|"SELECTOR_ERROR")
+            "CANCELLED")
+                return
+                ;;
+            "SELECTOR_ERROR")
+                # 回退到文本菜单
+                show_swap_manager_text_menu
                 return
                 ;;
             0) setup_swap ;;
@@ -588,6 +593,44 @@ show_swap_manager() {
             *)
                 debug_log "swap manager: 未知选择 $result"
                 return
+                ;;
+        esac
+    done
+}
+
+# SWAP管理文本菜单
+show_swap_manager_text_menu() {
+    while true; do
+        clear
+        print_logo
+        show_system_info
+
+        echo -e "${CYAN}${BOLD}SWAP内存管理${NC}"
+        echo ""
+        echo "1. 设置SWAP"
+        echo "2. 释放SWAP"
+        echo "3. 查看SWAP状态"
+        echo "0. 返回上级菜单"
+        echo ""
+        echo -n "请选择: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                setup_swap
+                ;;
+            2)
+                remove_swap
+                ;;
+            3)
+                show_swap_status
+                ;;
+            0)
+                return
+                ;;
+            *)
+                echo -e "${RED}无效选择${NC}"
+                sleep 1
                 ;;
         esac
     done

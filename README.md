@@ -92,8 +92,27 @@ warpkit --version
 
 ### 启动 WarpKit
 
+**交互式菜单模式：**
 ```bash
-warpkit
+warpkit                    # 启动主菜单
+```
+
+**直接访问功能模块：**
+```bash
+warpkit --system           # 进入系统工具
+warpkit --packages         # 进入包管理
+warpkit --network          # 进入网络工具
+warpkit --docker           # 进入 Docker 管理
+warpkit --logs             # 进入日志查看
+warpkit --scripts          # 进入脚本管理
+```
+
+**其他命令：**
+```bash
+warpkit --help             # 显示帮助信息
+warpkit --version          # 显示版本信息
+warpkit --update           # 检查并更新到最新版本
+warpkit --debug            # 启用调试模式
 ```
 
 ### 界面导航
@@ -136,12 +155,46 @@ warpkit
 - **BBR内核加速** - 一键启用BBR TCP拥塞控制
 - **流媒体解锁检测** 🌟
   - 检测 Netflix、Disney+、YouTube、Hulu 等平台
-  - 动态下载最新检测脚本
+  - 本地集成无广告版本
   - 支持 IPv4/IPv6 测试
 - **回程路由检测** 🌟
   - 检测三大运营商（电信、联通、移动）回程路由
-  - 自动安装检测工具
+  - 多源智能下载
   - 智能路径分析
+
+#### 🐳 Docker 管理 🌟
+- **容器管理**
+  - 查看所有/运行中/已停止的容器
+  - 启动、停止、重启、删除容器
+  - 查看容器日志和详细信息
+  - 进入容器终端（docker exec）
+  - 7步交互式创建新容器向导
+    * 镜像选择（本地/Docker Hub）
+    * 端口映射配置（支持多端口）
+    * 环境变量设置
+    * 卷挂载配置
+    * 网络模式选择
+    * 重启策略设置
+- **镜像管理**
+  - 查看本地镜像列表
+  - 从 Docker Hub 拉取镜像
+  - 删除镜像（支持强制删除）
+  - 搜索 Docker Hub
+  - 清理未使用的镜像
+- **网络管理**
+  - 查看 Docker 网络列表
+  - 创建自定义网络（bridge/host/overlay/macvlan）
+  - 删除网络
+  - 查看网络详细信息
+- **卷管理**
+  - 查看 Docker 卷列表
+  - 创建和删除卷
+  - 查看卷详细信息
+  - 清理未使用的卷
+- **环境检测**
+  - 自动检测 Docker 安装状态
+  - 显示 Docker 版本和系统信息
+  - 实时容器统计（运行中/总数）
 
 #### 📋 日志查看
 - 系统日志实时查看
