@@ -1163,6 +1163,17 @@ handle_modular_menu_item() {
                 return 0
             fi
             ;;
+        "软件管理")
+            debug_log "handle_modular_menu_item: 调用软件管理模块"
+            if call_module_function "software" "show_software_management"; then
+                debug_log "handle_modular_menu_item: 软件管理模块调用成功"
+                return 0
+            else
+                debug_log "handle_modular_menu_item: 软件管理模块调用失败，使用内置版本"
+                show_software_management_builtin
+                return 0
+            fi
+            ;;
         *)
             debug_log "handle_modular_menu_item: 未知菜单项 '$item'"
             return 1
@@ -1178,6 +1189,7 @@ show_main_menu() {
         "网络工具"
         "Docker管理"
         "日志查看"
+        "软件管理"
         "脚本管理"
         "退出"
     )
@@ -1230,10 +1242,11 @@ show_text_menu() {
         echo "3. 网络工具"
         echo "4. Docker管理"
         echo "5. 日志查看"
-        echo "6. 脚本管理"
+        echo "6. 软件管理"
+        echo "7. 脚本管理"
         echo "0. 退出"
         echo ""
-        echo -n "请选择功能 (0-6): "
+        echo -n "请选择功能 (0-7): "
 
         read -r choice
         echo ""
@@ -1263,12 +1276,16 @@ show_text_menu() {
                 CURRENT_SELECTION=5
                 handle_menu_selection
                 ;;
+            7)
+                CURRENT_SELECTION=6
+                handle_menu_selection
+                ;;
             0)
                 echo -e "${YELLOW}再见！${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}无效选择，请输入 0-6${NC}"
+                echo -e "${RED}无效选择，请输入 0-7${NC}"
                 sleep 2
                 ;;
         esac
@@ -1561,6 +1578,7 @@ handle_menu_selection() {
         "网络工具"
         "Docker管理"
         "日志查看"
+        "软件管理"
         "脚本管理"
         "退出"
     )
@@ -1594,6 +1612,9 @@ handle_menu_selection() {
                         ;;
                     "日志查看")
                         show_log_viewer_builtin
+                        ;;
+                    "软件管理")
+                        show_software_management_builtin
                         ;;
                 esac
             fi
@@ -1711,6 +1732,19 @@ show_docker_manager_builtin() {
     read -n1
 }
 
+# 软件管理演示（内置版本）
+show_software_management_builtin() {
+    clear
+    echo -e "${BLUE}${BOLD}软件管理${NC}"
+    echo ""
+    echo -e "${CYAN}软件管理功能:${NC}"
+    echo "  • 宝塔面板 - Linux服务器管理面板"
+    echo ""
+    echo "提示: 完整的软件管理功能请使用模块版本"
+    echo ""
+    echo "按任意键返回主菜单"
+    read -n1
+}
 
 # 系统更新演示
 show_system_update() {
@@ -1757,6 +1791,7 @@ show_help() {
     echo "  --network         进入网络工具模块"
     echo "  --docker          进入 Docker 管理模块"
     echo "  --logs            进入日志查看模块"
+    echo "  --software        进入软件管理模块"
     echo "  --scripts         进入脚本管理模块"
     echo ""
     echo -e "${YELLOW}高级选项:${NC}"
@@ -1827,6 +1862,12 @@ parse_arguments() {
                 call_module_function "logs" "show_log_viewer" || show_log_viewer_builtin
                 exit 0
                 ;;
+            --software)
+                # 直接进入软件管理模块
+                init_module_system
+                call_module_function "software" "show_software_management" || show_software_management_builtin
+                exit 0
+                ;;
             --scripts)
                 # 直接进入脚本管理模块
                 show_script_management
@@ -1872,9 +1913,9 @@ show_script_management() {
         echo "2. 卸载WarpKit"
         echo "3. 查看版本信息"
         echo "4. 清理缓存文件"
-        echo "5. 返回主菜单"
+        echo "0. 返回主菜单"
         echo ""
-        echo -n "请选择功能 (1-5): "
+        echo -n "请选择功能 (0-4): "
 
         read -r choice
         echo ""
@@ -1892,11 +1933,11 @@ show_script_management() {
             4)
                 clean_cache_files
                 ;;
-            5)
+            0)
                 return
                 ;;
             *)
-                echo -e "${RED}无效选择，请输入 1-5${NC}"
+                echo -e "${RED}无效选择，请输入 0-4${NC}"
                 sleep 2
                 ;;
         esac
