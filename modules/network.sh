@@ -472,6 +472,13 @@ EOF
 
 # 流媒体解锁检测
 show_streaming_unlock_check() {
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+
     clear
     echo -e "${BLUE}${BOLD}流媒体解锁检测${NC}"
     echo ""
@@ -558,6 +565,13 @@ show_streaming_unlock_check() {
 
 # 回程路由检测
 show_backtrace_check() {
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+
     clear
     echo -e "${BLUE}${BOLD}回程路由检测${NC}"
     echo ""
@@ -634,6 +648,13 @@ show_backtrace_check() {
 
 # IP质量检测
 show_ipquality_check() {
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+
     clear
     echo -e "${BLUE}${BOLD}IP质量检测${NC}"
     echo ""

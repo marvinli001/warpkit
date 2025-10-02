@@ -530,6 +530,13 @@ show_cleanable_logs() {
 
 # 清理旧的归档日志
 cleanup_archived_logs() {
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+
     clear
     echo -e "${BLUE}${BOLD}清理归档日志${NC}"
     echo ""
@@ -568,6 +575,13 @@ cleanup_archived_logs() {
 
 # 清理journal日志
 cleanup_journal_logs() {
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+
     clear
     echo -e "${BLUE}${BOLD}清理Journal日志${NC}"
     echo ""

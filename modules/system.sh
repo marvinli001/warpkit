@@ -333,6 +333,13 @@ select_and_change_mirror() {
     local selected_item="${mirror_list[$result]}"
     local mirror_url="${selected_item#*@}"
 
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+
     # 检查是否需要切换为内网地址
     local use_intranet=false
     for i in "${!mirror_list_extranet[@]}"; do
@@ -672,6 +679,13 @@ show_swap_status() {
 
 # 设置SWAP
 setup_swap() {
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
+        return
+    fi
+
     clear
     echo -e "${BLUE}${BOLD}设置SWAP内存${NC}"
     echo ""
@@ -862,6 +876,13 @@ remove_swap() {
     fi
 
     if [[ "$result" -eq $((${#swap_options[@]} - 1)) ]]; then
+        return
+    fi
+
+    # 恢复终端状态以便用户输入
+    if ! restore_terminal_state; then
+        echo -e "${RED}终端状态恢复失败${NC}"
+        sleep 2
         return
     fi
 
